@@ -1,11 +1,13 @@
-name: RLFW_BaleBot
+name: rlfw_balebot
 
 services:
   bot:
     build:
       context: .
       dockerfile: Dockerfile
-    image: RLFW_BaleBot:latest
+    # نام ایمیج داکر باید حتما lowercase باشد (محدودیت رجیستری داکر)؛ نام نمایشی/کانتینر
+    # همچنان RLFW_BaleBot است.
+    image: rlfw_balebot:latest
     container_name: RLFW_BaleBot
     restart: unless-stopped
 
