@@ -1,7 +1,14 @@
+# ایمیج پایه، با امکان جایگزینی در صورت مشکل شبکه هنگام pull از Docker Hub
+# (مثلاً خطای "connection reset by peer" روی برخی سرورها). پیش‌فرض همان ایمیج رسمی
+# Docker Hub است؛ در صورت نیاز می‌توانید موقع build مقدار دیگری بدهید، مثلا یک آینه:
+#   docker compose build --build-arg BASE_IMAGE=docker.arvancloud.ir/library/python:3.12-slim-bookworm
+# یا ساده‌تر، مقدار BASE_IMAGE را در فایل .env تنظیم کنید (به .env.example نگاه کنید).
+ARG BASE_IMAGE=python:3.12-slim-bookworm
+
 # ============================================================
 #  مرحله ۱: نصب وابستگی‌ها در یک ایمیج موقت (build-time only)
 # ============================================================
-FROM python:3.12-slim-bookworm AS builder
+FROM ${BASE_IMAGE} AS builder
 
 # به‌روزرسانی امنیتی پکیج‌های پایه + نصب فقط چیزی که برای build لازم است
 RUN apt-get update \
@@ -21,7 +28,7 @@ RUN pip install --no-cache-dir --user -r requirements.txt
 # ============================================================
 #  مرحله ۲: ایمیج نهایی — حداقلی، بدون ابزار build، بدون root
 # ============================================================
-FROM python:3.12-slim-bookworm AS runtime
+FROM ${BASE_IMAGE} AS runtime
 
 LABEL org.opencontainers.image.title="RLFW_BaleBot" \
       org.opencontainers.image.description="ربات لیگ کتابخوانی برای پیام‌رسان بله" \

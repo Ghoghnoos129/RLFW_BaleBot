@@ -5,6 +5,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        # اگر pull ایمیج پایه از Docker Hub با خطای شبکه (مثل connection reset) مواجه شد،
+        # در فایل .env مقدار BASE_IMAGE را به یک آینه (مثلا ArvanCloud) تغییر دهید؛
+        # جزئیات در .env.example.
+        BASE_IMAGE: ${BASE_IMAGE:-python:3.12-slim-bookworm}
     # نام ایمیج داکر باید حتما lowercase باشد (محدودیت رجیستری داکر)؛ نام نمایشی/کانتینر
     # همچنان RLFW_BaleBot است.
     image: rlfw_balebot:latest
