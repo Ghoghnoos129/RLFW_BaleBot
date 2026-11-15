@@ -26,7 +26,6 @@ services:
       - no-new-privileges:true         # جلوگیری از افزایش دسترسی (setuid و مشابه)
     cap_drop:
       - ALL                            # هیچ Linux capability اضافه‌ای لازم ندارد
-    pid: "container"                   # namespace جدا برای PID
     ipc: "none"                        # بدون نیاز به IPC مشترک
     networks:
       - internal_only                  # بدون دسترسی به شبکه خارجی به جز از طریق NAT خروجی معمول
