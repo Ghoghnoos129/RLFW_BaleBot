@@ -1,0 +1,23 @@
+# رازها — هرگز نباید وارد گیت شوند
+.env
+.env.*
+!.env.example
+deploy/webhook.env
+.deploy/
+
+# داده و لاگ محلی
+data/
+*.db
+*.db-journal
+bot.log
+
+# پایتون
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# ویرایشگرها/سیستم‌عامل
+.vscode/
+.idea/
+.DS_Store
