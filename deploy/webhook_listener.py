@@ -37,11 +37,11 @@ WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "")
 WEBHOOK_PATH = os.environ.get("WEBHOOK_PATH", "/hooks/change-me")
 EXPECTED_BRANCH = os.environ.get("DEPLOY_BRANCH", "main")
 DEPLOY_CMD = os.environ.get(
-    "DEPLOY_CMD", "sudo -n /opt/reading-league-bot/deploy/deploy.sh"
+    "DEPLOY_CMD", "sudo -n /opt/RLFW_BaleBot/deploy/deploy.sh"
 ).split()
 LISTEN_HOST = os.environ.get("LISTEN_HOST", "127.0.0.1")
 LISTEN_PORT = int(os.environ.get("LISTEN_PORT", "9001"))
-LOG_PATH = os.environ.get("WEBHOOK_LOG_PATH", "/var/log/reading-league-bot/webhook.log")
+LOG_PATH = os.environ.get("WEBHOOK_LOG_PATH", "/var/log/RLFW_BaleBot/webhook.log")
 DEPLOY_TIMEOUT = int(os.environ.get("DEPLOY_TIMEOUT_SECONDS", "600"))
 
 # اختیاری: محدودسازی اضافه بر اساس IP (defense-in-depth؛ HMAC همچنان اصل ماجراست چون

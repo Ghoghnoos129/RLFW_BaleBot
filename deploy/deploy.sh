@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 #
 # این اسکریپت فقط باید توسط root اجرا شود — از طریق «sudo -n» محدود شده در
-# /etc/sudoers.d/reading-league-bot-deploy که آن را به کاربر webhook می‌دهد.
+# /etc/sudoers.d/RLFW_BaleBot-deploy که آن را به کاربر webhook می‌دهد.
 #
 # مالکیت این فایل باید root:root و دسترسی 700 باشد (بوسیله bootstrap.sh تنظیم می‌شود)
 # تا کاربر webhook نتواند محتوای آن را تغییر دهد؛ در غیر این صورت sudo بی‌معنی می‌شود.
 #
 set -euo pipefail
 
-REPO_DIR="/opt/reading-league-bot"
+REPO_DIR="/opt/RLFW_BaleBot"
 BRANCH="main"
-LOCK_FILE="/var/lock/reading-league-bot-deploy.lock"
-LOG_FILE="/var/log/reading-league-bot/deploy.log"
+LOCK_FILE="/var/lock/RLFW_BaleBot-deploy.lock"
+LOG_FILE="/var/log/RLFW_BaleBot/deploy.log"
 SSH_KEY="$REPO_DIR/.deploy/id_ed25519"
 KNOWN_HOSTS="$REPO_DIR/.deploy/known_hosts"
 

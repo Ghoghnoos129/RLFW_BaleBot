@@ -1,0 +1,15 @@
+[Unit]
+Description=RLFW_BaleBot
+After=network.target
+
+[Service]
+# مسیر پوشه پروژه روی سرور را اینجا جایگزین کنید
+WorkingDirectory=/opt/RLFW_BaleBot
+ExecStart=/opt/RLFW_BaleBot/venv/bin/python /opt/RLFW_BaleBot/run.py
+Restart=always
+RestartSec=5
+User=www-data
+EnvironmentFile=/opt/RLFW_BaleBot/.env
+
+[Install]
+WantedBy=multi-user.target

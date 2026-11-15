@@ -1,12 +1,12 @@
-name: reading-league-bot
+name: RLFW_BaleBot
 
 services:
   bot:
     build:
       context: .
       dockerfile: Dockerfile
-    image: reading-league-bot:latest
-    container_name: reading-league-bot
+    image: RLFW_BaleBot:latest
+    container_name: RLFW_BaleBot
     restart: unless-stopped
 
     env_file:

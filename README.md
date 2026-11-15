@@ -1,4 +1,4 @@
-# ربات لیگ کتابخوانی (پیام‌رسان بله)
+# RLFW_BaleBot — ربات لیگ کتابخوانی (پیام‌رسان بله)
 
 ربات مدیریت کامل «لیگ کتابخوانی» طبق طرح ارسالی شما: ثبت‌نام کاربران، ثبت دقایق مطالعه،
 محاسبه خودکار امتیاز (۲۰ دقیقه برای خانواده دارای فرزند / ۲۵ دقیقه برای بدون فرزند)،
@@ -21,7 +21,7 @@
 هیچ Linux capability اضافه، محدودیت CPU/RAM) اجرا می‌شود:
 
 ```bash
-cd reading-league-bot
+cd RLFW_BaleBot
 cp .env.example .env
 nano .env   # BALE_TOKEN و ADMIN_SETUP_CODE را پر کنید
 
@@ -59,7 +59,7 @@ ADMIN_SETUP_CODE=یک-رمز-دلخواه
 
 ### اجرا بدون Docker (جایگزین، فقط در صورت نیاز)
 اگر به هر دلیلی نمی‌خواهید از Docker استفاده کنید، همان روش قدیمی (پایتون مستقیم + یک
-سرویس systemd نمونه در `systemd/reading-league-bot-no-docker.service.example`) هم
+سرویس systemd نمونه در `systemd/RLFW_BaleBot-no-docker.service.example`) هم
 جواب می‌دهد؛ ولی سخت‌سازی‌های این بخش (کاربر غیر-روت، فایل‌سیستم read-only و غیره) را ندارد.
 
 ## ۳. استفاده برای کاربران عادی
@@ -123,7 +123,7 @@ python tests/test_flow.py
 ## ساختار پروژه
 
 ```
-reading-league-bot/
+RLFW_BaleBot/
 ├── run.py                  # نقطه اجرا (polling loop)
 ├── requirements.txt
 ├── .env.example
@@ -135,7 +135,7 @@ reading-league-bot/
 │   ├── keyboards.py         # کیبوردهای شیشه‌ای و منو
 │   ├── texts.py             # متن پیام‌ها
 │   └── handlers.py          # منطق اصلی گفتگو و دستورات ادمین
-├── systemd/reading-league-bot.service
+├── systemd/RLFW_BaleBot.service
 └── tests/test_flow.py
 ```
 

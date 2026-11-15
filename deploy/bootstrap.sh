@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 #
 # اسکریپت یک‌بار-اجرا برای آماده‌سازی سرور جهت دیپلوی خودکار از طریق وبهوک گیت‌هاب.
-# فقط روی سروری اجرا کنید که پروژه از قبل در /opt/reading-league-bot کلون شده باشد
+# فقط روی سروری اجرا کنید که پروژه از قبل در /opt/RLFW_BaleBot کلون شده باشد
 # (به بخش «نصب روی سرور» در deploy/README.md نگاه کنید).
 #
 # اجرا:   sudo bash deploy/bootstrap.sh
 #
 set -euo pipefail
 
-APP_DIR="/opt/reading-league-bot"
+APP_DIR="/opt/RLFW_BaleBot"
 DEPLOY_USER="webhook"
-LOG_DIR="/var/log/reading-league-bot"
+LOG_DIR="/var/log/RLFW_BaleBot"
 
 if [ "$(id -u)" -ne 0 ]; then
     echo "خطا: این اسکریپت باید با روت اجرا شود (sudo bash deploy/bootstrap.sh)" >&2
@@ -35,11 +35,11 @@ echo "== ۲) ساخت پوشه‌های لازم =="
 mkdir -p "$LOG_DIR"
 chown "$DEPLOY_USER:$DEPLOY_USER" "$LOG_DIR"
 mkdir -p "$APP_DIR/.deploy"
-mkdir -p "$(dirname /var/lock/reading-league-bot-deploy.lock)"
+mkdir -p "$(dirname /var/lock/RLFW_BaleBot-deploy.lock)"
 
 echo "== ۳) کلید SSH اختصاصی برای کلون/pull ریپوی پرایوت (در صورت نبود) =="
 if [ ! -f "$APP_DIR/.deploy/id_ed25519" ]; then
-    ssh-keygen -t ed25519 -C "reading-league-bot-deploy-$(hostname)" -f "$APP_DIR/.deploy/id_ed25519" -N ""
+    ssh-keygen -t ed25519 -C "RLFW_BaleBot-deploy-$(hostname)" -f "$APP_DIR/.deploy/id_ed25519" -N ""
     echo
     echo ">>> این کلید عمومی را به عنوان Deploy Key (فقط خواندنی / Read-only) در گیت‌هاب اضافه کنید:"
     echo "    مخزن شما -> Settings -> Deploy keys -> Add deploy key"
@@ -95,8 +95,8 @@ chown root:root "$APP_DIR/deploy/deploy.sh"
 chmod 700 "$APP_DIR/deploy/deploy.sh"
 
 echo "== ۷) نصب قانون sudoers محدود =="
-SUDOERS_DST="/etc/sudoers.d/reading-league-bot-deploy"
-install -m 440 -o root -g root "$APP_DIR/deploy/sudoers-reading-league-bot-deploy" "$SUDOERS_DST"
+SUDOERS_DST="/etc/sudoers.d/RLFW_BaleBot-deploy"
+install -m 440 -o root -g root "$APP_DIR/deploy/sudoers-RLFW_BaleBot-deploy" "$SUDOERS_DST"
 if ! visudo -cf "$SUDOERS_DST"; then
     echo "خطا: فایل sudoers نامعتبر است، حذف شد." >&2
     rm -f "$SUDOERS_DST"
@@ -105,13 +105,13 @@ fi
 echo "قانون sudoers نصب و تایید شد."
 
 echo "== ۸) نصب و فعال‌سازی سرویس systemd =="
-cp "$APP_DIR/deploy/webhook-listener.service" /etc/systemd/system/webhook-listener.service
+cp "$APP_DIR/deploy/RLFW_BaleBot-webhook.service" /etc/systemd/system/RLFW_BaleBot-webhook.service
 systemctl daemon-reload
-systemctl enable --now webhook-listener.service
+systemctl enable --now RLFW_BaleBot-webhook.service
 
 echo
 echo "✅ تمام شد. وضعیت سرویس:"
-systemctl --no-pager status webhook-listener.service || true
+systemctl --no-pager status RLFW_BaleBot-webhook.service || true
 
 cat <<'EOF'
 
@@ -122,6 +122,6 @@ cat <<'EOF'
      بیرون در دسترس باشد (پیش‌فرض همین‌طور است چون روی 127.0.0.1 گوش می‌دهد).
   3) در تنظیمات ریپوی گیت‌هاب، وبهوکی با Payload URL و Secret بالا بسازید (فقط رویداد push).
   4) یک commit آزمایشی push کنید و لاگ‌ها را ببینید:
-       journalctl -u webhook-listener -f
-       tail -f /var/log/reading-league-bot/deploy.log
+       journalctl -u RLFW_BaleBot-webhook -f
+       tail -f /var/log/RLFW_BaleBot/deploy.log
 EOF

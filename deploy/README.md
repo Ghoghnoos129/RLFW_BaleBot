@@ -72,11 +72,11 @@ ufw enable
 دستی کلون کنید:
 
 ```bash
-mkdir -p /opt/reading-league-bot
-cd /opt/reading-league-bot
+mkdir -p /opt/RLFW_BaleBot
+cd /opt/RLFW_BaleBot
 git init
 mkdir -p .deploy
-ssh-keygen -t ed25519 -C "reading-league-bot-deploy" -f .deploy/id_ed25519 -N ""
+ssh-keygen -t ed25519 -C "RLFW_BaleBot-deploy" -f .deploy/id_ed25519 -N ""
 cat .deploy/id_ed25519.pub
 ```
 
@@ -96,22 +96,22 @@ ssh-keygen -lf .deploy/known_hosts
 حالا کلون واقعی را انجام دهید (مسیر ریپوی خودتان را جایگزین کنید):
 
 ```bash
-export GIT_SSH_COMMAND="ssh -i /opt/reading-league-bot/.deploy/id_ed25519 -o IdentitiesOnly=yes -o UserKnownHostsFile=/opt/reading-league-bot/.deploy/known_hosts"
+export GIT_SSH_COMMAND="ssh -i /opt/RLFW_BaleBot/.deploy/id_ed25519 -o IdentitiesOnly=yes -o UserKnownHostsFile=/opt/RLFW_BaleBot/.deploy/known_hosts"
 cd /opt
-rm -rf reading-league-bot_tmp
-git clone git@github.com:YOUR_USERNAME/YOUR_REPO.git reading-league-bot_tmp
+rm -rf RLFW_BaleBot_tmp
+git clone git@github.com:YOUR_USERNAME/YOUR_REPO.git RLFW_BaleBot_tmp
 # محتوای کلون‌شده را جایگزین پوشه‌ای کنید که .deploy را در آن ساختید:
-rsync -a --exclude='.deploy' reading-league-bot_tmp/ /opt/reading-league-bot/
-rm -rf reading-league-bot_tmp
+rsync -a --exclude='.deploy' RLFW_BaleBot_tmp/ /opt/RLFW_BaleBot/
+rm -rf RLFW_BaleBot_tmp
 ```
 
-(اگر پروژه را به ریپوی گیت‌هاب خودتان push نکرده‌اید، اول این پوشه `reading-league-bot`
+(اگر پروژه را به ریپوی گیت‌هاب خودتان push نکرده‌اید، اول این پوشه `RLFW_BaleBot`
 که از من گرفته‌اید را به یک ریپوی پرایوت جدید push کنید.)
 
 فایل `.env` واقعی را بسازید (این فایل هرگز نباید وارد گیت شود؛ در `.gitignore`/`.dockerignore`
 هم هست):
 ```bash
-cd /opt/reading-league-bot
+cd /opt/RLFW_BaleBot
 cp .env.example .env
 nano .env   # BALE_TOKEN را وارد کنید و یک ADMIN_SETUP_CODE دلخواه بگذارید
 # (بعد از بالا آمدن ربات، همین کد را به ربات پیام بدهید تا مدیر اصلی شوید — به README اصلی پروژه نگاه کنید)
@@ -120,7 +120,7 @@ nano .env   # BALE_TOKEN را وارد کنید و یک ADMIN_SETUP_CODE دلخ�
 ## مرحله ۳: اجرای bootstrap (یک‌بار)
 
 ```bash
-cd /opt/reading-league-bot
+cd /opt/RLFW_BaleBot
 sudo bash deploy/bootstrap.sh
 ```
 
@@ -131,7 +131,7 @@ sudo bash deploy/bootstrap.sh
    و در `deploy/webhook.env` ذخیره می‌کند — این دو مقدار را در خروجی می‌بینید.
 3. مالکیت `deploy.sh` را `root:root` و دسترسی `700` می‌کند.
 4. قانون محدود `sudoers` را نصب و با `visudo -cf` اعتبارسنجی می‌کند.
-5. سرویس `systemd` به نام `webhook-listener` را نصب و فعال می‌کند.
+5. سرویس `systemd` به نام `RLFW_BaleBot-webhook` را نصب و فعال می‌کند.
 
 خروجی را نگه دارید — مقدار **Payload URL** و **Secret** را در مرحله بعد لازم دارید.
 
@@ -139,12 +139,12 @@ sudo bash deploy/bootstrap.sh
 
 فایل `deploy/nginx-webhook.conf` را کپی و ویرایش کنید:
 ```bash
-cp /opt/reading-league-bot/deploy/nginx-webhook.conf /etc/nginx/sites-available/reading-league-bot-webhook.conf
-nano /etc/nginx/sites-available/reading-league-bot-webhook.conf
+cp /opt/RLFW_BaleBot/deploy/nginx-webhook.conf /etc/nginx/sites-available/RLFW_BaleBot-webhook.conf
+nano /etc/nginx/sites-available/RLFW_BaleBot-webhook.conf
 # deploy.yourdomain.com -> دامنه واقعی خودتان
 # /hooks/REPLACE_WITH_RANDOM_TOKEN -> همان مسیری که bootstrap.sh ساخت (WEBHOOK_PATH)
 
-ln -s /etc/nginx/sites-available/reading-league-bot-webhook.conf /etc/nginx/sites-enabled/
+ln -s /etc/nginx/sites-available/RLFW_BaleBot-webhook.conf /etc/nginx/sites-enabled/
 nginx -t && systemctl reload nginx
 
 # گرفتن گواهی TLS (دامنه باید از قبل به IP این سرور اشاره کند)
@@ -163,7 +163,7 @@ certbot --nginx -d deploy.yourdomain.com
 ## مرحله ۶: اولین دیپلوی دستی (برای اطمینان قبل از اتکا به وبهوک)
 
 ```bash
-cd /opt/reading-league-bot
+cd /opt/RLFW_BaleBot
 sudo ./deploy/deploy.sh
 docker compose ps
 ```
@@ -173,8 +173,8 @@ docker compose ps
 
 یک تغییر کوچک commit و push کنید، سپس:
 ```bash
-journalctl -u webhook-listener -f      # لاگ دریافت‌کننده وبهوک
-tail -f /var/log/reading-league-bot/deploy.log   # لاگ خود دیپلوی
+journalctl -u RLFW_BaleBot-webhook -f      # لاگ دریافت‌کننده وبهوک
+tail -f /var/log/RLFW_BaleBot/deploy.log   # لاگ خود دیپلوی
 ```
 در گیت‌هاب هم زیر **Settings → Webhooks → (وبهوک شما) → Recent Deliveries** می‌توانید
 ببینید درخواست با چه کد وضعیتی جواب داده شده (باید ۲۰۲ باشد).
@@ -187,14 +187,14 @@ tail -f /var/log/reading-league-bot/deploy.log   # لاگ خود دیپلوی
 |---|---|
 | در Recent Deliveries کد ۴۰۳ می‌بینید | Secret در گیت‌هاب با `WEBHOOK_SECRET` در `deploy/webhook.env` یکی نیست |
 | کد ۴۰۴ می‌بینید | مسیر در Payload URL گیت‌هاب با `WEBHOOK_PATH` یکی نیست، یا Nginx هنوز location درست را ندارد |
-| کد ۲۰۲ می‌گیرید ولی تغییری اعمال نمی‌شود | `journalctl -u webhook-listener -f` و `deploy.log` را ببینید؛ احتمالا خطای `sudo` یا git |
+| کد ۲۰۲ می‌گیرید ولی تغییری اعمال نمی‌شود | `journalctl -u RLFW_BaleBot-webhook -f` و `deploy.log` را ببینید؛ احتمالا خطای `sudo` یا git |
 | `sudo: a password is required` در deploy.log | قانون sudoers نصب نشده یا کاربر اجراکننده webhook_listener برابر `webhook` نیست |
-| خطای SSH در `git fetch` | `known_hosts` یا کلید deploy درست تنظیم نشده؛ با همان کاربر root دستی تست کنید:<br>`sudo -u root ssh -i /opt/reading-league-bot/.deploy/id_ed25519 -T git@github.com` |
+| خطای SSH در `git fetch` | `known_hosts` یا کلید deploy درست تنظیم نشده؛ با همان کاربر root دستی تست کنید:<br>`sudo -u root ssh -i /opt/RLFW_BaleBot/.deploy/id_ed25519 -T git@github.com` |
 
 ## چرخش (Rotate) Secret یا کلید در صورت نیاز
 
 - **رمز وبهوک:** مقدار جدید را در `deploy/webhook.env` بگذارید، سرویس را ری‌استارت کنید
-  (`systemctl restart webhook-listener`)، و همان مقدار را در تنظیمات وبهوک گیت‌هاب هم
+  (`systemctl restart RLFW_BaleBot-webhook`)، و همان مقدار را در تنظیمات وبهوک گیت‌هاب هم
   به‌روز کنید.
 - **Deploy key:** یک کلید جدید بسازید، در گیت‌هاب جایگزین کنید، کلید قدیمی را از گیت‌هاب
   حذف کنید، فایل‌های `.deploy/id_ed25519*` را عوض کنید.

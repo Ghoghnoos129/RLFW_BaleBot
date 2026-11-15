@@ -23,7 +23,7 @@ RUN pip install --no-cache-dir --user -r requirements.txt
 # ============================================================
 FROM python:3.12-slim-bookworm AS runtime
 
-LABEL org.opencontainers.image.title="reading-league-bot" \
+LABEL org.opencontainers.image.title="RLFW_BaleBot" \
       org.opencontainers.image.description="ربات لیگ کتابخوانی برای پیام‌رسان بله" \
       org.opencontainers.image.licenses="MIT"
 
