@@ -1,9 +1,16 @@
-# ایمیج پایه، با امکان جایگزینی در صورت مشکل شبکه هنگام pull از Docker Hub
-# (مثلاً خطای "connection reset by peer" روی برخی سرورها). پیش‌فرض همان ایمیج رسمی
-# Docker Hub است؛ در صورت نیاز می‌توانید موقع build مقدار دیگری بدهید، مثلا یک آینه:
-#   docker compose build --build-arg BASE_IMAGE=docker.arvancloud.ir/library/python:3.12-slim-bookworm
-# یا ساده‌تر، مقدار BASE_IMAGE را در فایل .env تنظیم کنید (به .env.example نگاه کنید).
-ARG BASE_IMAGE=python:3.12-slim-bookworm
+# ایمیج پایه.
+#
+# نکته مهم: Docker هیچ راهی برای «اول رجیستری اصلی را امتحان کن، اگر نشد خودکار برو سراغ
+# آینه» ندارد مگر با تنظیم registry-mirror در خودِ Docker daemon روی سرور (که نیاز به
+# دسترسی سرور/SSH دارد). چون هدف این است که بدون دست‌زدن به سرور یا پنل Coolify هم کار
+# کند، پیش‌فرض این پروژه مستقیم یک آینه‌ی ایرانی (ArvanCloud) است که معمولاً از ایران
+# پایدارتر از دانلود مستقیم از Docker Hub است. اگر سروری دارید که خودش مشکلی با
+# Docker Hub ندارد (مثلاً خارج از ایران)، یا این آینه هم در دسترس نبود، مقدار زیر را به
+# دلخواه عوض کنید (مستقیم همین‌جا، یا با BASE_IMAGE در .env / Build Variable در Coolify):
+#   python:3.12-slim-bookworm                                            (رسمی Docker Hub)
+#   docker.arvancloud.ir/library/python:3.12-slim-bookworm               (پیش‌فرض فعلی)
+#   docker.iranserver.com/library/python:3.12-slim-bookworm             (آینه جایگزین)
+ARG BASE_IMAGE=docker.arvancloud.ir/library/python:3.12-slim-bookworm
 
 # ============================================================
 #  مرحله ۱: نصب وابستگی‌ها در یک ایمیج موقت (build-time only)
