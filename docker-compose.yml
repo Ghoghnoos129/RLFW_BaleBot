@@ -1,0 +1,52 @@
+name: reading-league-bot
+
+services:
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: reading-league-bot:latest
+    container_name: reading-league-bot
+    restart: unless-stopped
+
+    env_file:
+      - .env
+
+    # --- سخت‌سازی امنیتی کانتینر ---
+    user: "10001:10001"               # همان appuser داخل Dockerfile، هرگز روت اجرا نشود
+    read_only: true                    # فایل‌سیستم ریشه فقط-خواندنی؛ فقط data/ و tmp قابل نوشتن‌اند
+    security_opt:
+      - no-new-privileges:true         # جلوگیری از افزایش دسترسی (setuid و مشابه)
+    cap_drop:
+      - ALL                            # هیچ Linux capability اضافه‌ای لازم ندارد
+    pid: "container"                   # namespace جدا برای PID
+    ipc: "none"                        # بدون نیاز به IPC مشترک
+    networks:
+      - internal_only                  # بدون دسترسی به شبکه خارجی به جز از طریق NAT خروجی معمول
+
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=16m
+
+    volumes:
+      - bot_data:/app/data            # تنها مسیر قابل‌نوشتن: دیتابیس sqlite + لاگ + heartbeat
+
+    # --- محدودیت منابع، برای جلوگیری از مصرف بی‌رویه در صورت باگ/حمله ---
+    cpus: "0.50"
+    mem_limit: 256m
+    mem_reservation: 64m
+    pids_limit: 64
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+networks:
+  internal_only:
+    driver: bridge
+    internal: false   # false چون ربات باید به tapi.bale.ai (اینترنت) وصل شود؛ هیچ پورتی هم به بیرون expose نمی‌شود
+
+volumes:
+  bot_data:
+    driver: local

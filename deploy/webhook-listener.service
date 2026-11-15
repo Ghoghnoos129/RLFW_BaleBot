@@ -1,0 +1,49 @@
+[Unit]
+Description=GitHub Webhook Listener (auto-deploy reading-league-bot)
+After=network.target
+# اگر داکر دسترس‌پذیر نباشد اجرا هم بی‌فایده است (sudo deploy.sh به docker نیاز دارد)
+Wants=docker.service
+After=docker.service
+
+[Service]
+Type=simple
+User=webhook
+Group=webhook
+EnvironmentFile=/opt/reading-league-bot/deploy/webhook.env
+ExecStart=/usr/bin/python3 /opt/reading-league-bot/deploy/webhook_listener.py
+Restart=on-failure
+RestartSec=5
+
+# ================= سخت‌سازی systemd (sandboxing) =================
+# این سرویس هیچ نیازی به نوشتن در جایی به‌جز لاگ خودش ندارد و هیچ‌وقت نباید
+# بتواند مستقیم روی فایل‌سیستم یا شبکه کاری غیر از HTTP داخلی انجام دهد.
+# توجه: اسکریپت deploy.sh که از طریق sudo فراخوانی می‌شود، پردازش جدیدی تحت
+# روت است و این محدودیت‌ها روی آن اعمال نمی‌شود — کنترل آن با sudoers و
+# مالکیت/دسترسی فایل deploy.sh انجام می‌شود، نه این‌جا.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RemoveIPC=true
+UMask=0077
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+CapabilityBoundingSet=
+AmbientCapabilities=
+ReadWritePaths=/var/log/reading-league-bot
+
+[Install]
+WantedBy=multi-user.target

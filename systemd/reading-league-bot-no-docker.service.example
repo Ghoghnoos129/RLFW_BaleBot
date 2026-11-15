@@ -1,0 +1,15 @@
+[Unit]
+Description=Reading League Bale Bot
+After=network.target
+
+[Service]
+# مسیر پوشه پروژه روی سرور را اینجا جایگزین کنید
+WorkingDirectory=/opt/reading-league-bot
+ExecStart=/opt/reading-league-bot/venv/bin/python /opt/reading-league-bot/run.py
+Restart=always
+RestartSec=5
+User=www-data
+EnvironmentFile=/opt/reading-league-bot/.env
+
+[Install]
+WantedBy=multi-user.target
