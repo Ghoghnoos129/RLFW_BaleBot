@@ -9,10 +9,10 @@ services:
         # نکته مهم: وقتی با «docker compose build» ساخته می‌شود (دقیقاً کاری که Coolify
         # انجام می‌دهد)، همین مقدار پیش‌فرض اینجا به Dockerfile پاس داده می‌شود و پیش‌فرض
         # داخل خودِ Dockerfile را override می‌کند — پس این دو باید همیشه با هم هماهنگ
-        # بمانند. اگر می‌خواهید آینه دیگری یا ایمیج رسمی Docker Hub استفاده شود، مقدار
-        # BASE_IMAGE را در .env (یا Build Variable در Coolify) تنظیم کنید؛ جزئیات در
+        # بمانند. اگر می‌خواهید آینه دیگری استفاده شود، مقدار BASE_IMAGE را در .env (یا
+        # Build Variable در Coolify) تنظیم کنید؛ جزئیات و لیست آینه‌های جایگزین در
         # .env.example.
-        BASE_IMAGE: ${BASE_IMAGE:-docker.ththt.ir/library/python:3.12-slim-bookworm}
+        BASE_IMAGE: ${BASE_IMAGE:-python:3.12-slim-bookworm}
     # نام ایمیج داکر باید حتما lowercase باشد (محدودیت رجیستری داکر)؛ نام نمایشی/کانتینر
     # همچنان RLFW_BaleBot است.
     image: rlfw_balebot:latest

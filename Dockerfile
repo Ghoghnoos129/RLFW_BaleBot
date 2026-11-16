@@ -1,15 +1,22 @@
-# ایمیج پایه — انتخاب آینه پایدارتر برای شبکه ایران.
+# ایمیج پایه.
 #
 # نکته مهم: Docker هیچ راهی برای «اول رجیستری اصلی را امتحان کن، اگر نشد خودکار برو سراغ
 # آینه» ندارد مگر با تنظیم registry-mirror در خودِ Docker daemon روی سرور (که نیاز به
-# دسترسی سرور/SSH دارد). چون هدف این است که بدون دست‌زدن به سرور یا پنل Coolify هم کار
-# کند، این مقدار مستقیم به یک آینه اشاره می‌کند. اگر آینه فعلی در دسترس نبود، مقدار زیر
-# را عوض کنید (مستقیم همین‌جا، یا با BASE_IMAGE در .env / Build Variable در Coolify):
-#   python:3.12-slim-bookworm                               (رسمی Docker Hub)
-#   docker.ththt.ir/library/python:3.12-slim-bookworm        (پیش‌فرض فعلی)
+# دسترسی سرور/SSH دارد). بنابراین این مقدار مستقیم به یک رجیستری/ایمیج مشخص اشاره می‌کند
+# و اگر آن یکی در دسترس نبود باید دستی عوض شود (مستقیم همین‌جا، یا با BASE_IMAGE در
+# .env / Build Variable در Coolify).
+#
+# پیش‌فرض فعلی عمداً ایمیج رسمی Docker Hub است: آینه‌های ایرانی (arvancloud، ththt.ir،
+# iranserver و مشابه) خودشان هم گاهی به‌طور موقت از دسترس خارج می‌شوند یا خطای 502/503
+# می‌دهند (یک نقطه‌ی خرابی اضافه که ربطی به فیلترینگ ندارد)، در حالی‌که در تجربه‌ی اخیر
+# شما سرور به‌طور مستقیم و بدون مشکل به Docker Hub وصل شده. اگر در آینده دوباره خطای شبکه
+# از نوع «connection reset» موقع pull از Docker Hub دیدید (نه خطای 502 یک آینه)، یکی از
+# آینه‌های زیر را امتحان کنید:
+#   python:3.12-slim-bookworm                                (پیش‌فرض فعلی — رسمی Docker Hub)
 #   docker.arvancloud.ir/library/python:3.12-slim-bookworm   (آینه جایگزین)
 #   docker.iranserver.com/library/python:3.12-slim-bookworm  (آینه جایگزین)
-ARG BASE_IMAGE=docker.ththt.ir/library/python:3.12-slim-bookworm
+#   docker.ththt.ir/library/python:3.12-slim-bookworm        (آینه جایگزین — الان قطع بود)
+ARG BASE_IMAGE=python:3.12-slim-bookworm
 
 # ============================================================
 #  مرحله ۱: نصب وابستگی‌ها در یک ایمیج موقت (build-time only)
