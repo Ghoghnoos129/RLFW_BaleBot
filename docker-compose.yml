@@ -29,7 +29,9 @@ services:
       - no-new-privileges:true         # جلوگیری از افزایش دسترسی (setuid و مشابه)
     cap_drop:
       - ALL                            # هیچ Linux capability اضافه‌ای لازم ندارد
-    pid: "container"                   # namespace جدا برای PID
+    # توجه: خط pid حذف شد — Docker به طور پیش‌فرض برای هر کانتینر یک PID namespace
+    # جداگانه و ایزوله می‌سازد (امن‌ترین حالت). مقدار "container" به تنهایی نامعتبر است
+    # و باعث خطای «invalid PID mode: container» می‌شد.
     ipc: "none"                        # بدون نیاز به IPC مشترک
     networks:
       - internal_only                  # بدون دسترسی به شبکه خارجی به جز از طریق NAT خروجی معمول
