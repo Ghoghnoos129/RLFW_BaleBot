@@ -39,8 +39,17 @@ def inline(rows) -> dict:
     }
 
 
+CANCEL_DATA = "cancel"
+
+
+def cancel_kb() -> dict:
+    """دکمه‌ی شیشه‌ای «انصراف» زیر هر پرسشی که ربات از کاربر/مدیر می‌پرسد."""
+    return inline([[("❌ انصراف", CANCEL_DATA)]])
+
+
 def yes_no_children(prefix: str = "children"):
-    return inline([[("دارم", f"{prefix}_yes"), ("ندارم", f"{prefix}_no")]])
+    return inline([[("دارم", f"{prefix}_yes"), ("ندارم", f"{prefix}_no")],
+                   [("❌ انصراف", CANCEL_DATA)]])
 
 
 def book_choice_keyboard(books, prefix="book_done"):

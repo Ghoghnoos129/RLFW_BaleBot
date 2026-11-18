@@ -32,7 +32,7 @@ LOG_PATH = os.getenv("LOG_PATH", "./data/bot.log")
 HEARTBEAT_PATH = os.getenv("HEARTBEAT_PATH", "./data/heartbeat")
 SEASON_PREFIX = os.getenv("DEFAULT_SEASON_PREFIX", "فصل")
 
-VERSION = "0.2"
+VERSION = "0.2.1"
 
 API_BASE = f"https://tapi.bale.ai/bot{BALE_TOKEN}"
 

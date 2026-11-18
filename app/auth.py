@@ -14,6 +14,17 @@ def is_admin(user_id: int) -> bool:
     return user_id in ADMIN_IDS or db.is_db_admin(user_id)
 
 
+def can_wipe(user_id: int) -> bool:
+    """حذف همه‌ی داده‌ها: مدیر اصلی، یا ادمینی که مدیر اصلی این اجازه را به او داده است."""
+    return is_super_admin(user_id) or db.db_admin_can_wipe(user_id)
+
+
+def super_admin_ids() -> set:
+    ids = set(ADMIN_IDS)
+    ids.update(a["user_id"] for a in db.list_admins() if a["is_super"])
+    return ids
+
+
 def admin_ids() -> set:
     ids = set(ADMIN_IDS)
     ids.update(a["user_id"] for a in db.list_admins())

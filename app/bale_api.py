@@ -4,9 +4,10 @@
 getUpdates / sendMessage / answerCallbackQuery / editMessageText
 """
 import logging
+import os
 import requests
 
-from app.config import API_BASE
+from app.config import API_BASE, BALE_TOKEN
 from app.utils import split_text
 
 log = logging.getLogger("bale_api")
@@ -86,3 +87,48 @@ def edit_or_send(chat_id: int, message_id, text: str, reply_markup: dict = None)
         if "not modified" in str(resp.get("description", "")).lower():
             return resp
     return send_message(chat_id, text, reply_markup=reply_markup)
+
+
+def send_document(chat_id: int, path: str, caption: str = None):
+    """ارسال فایل (مثلاً فایل پشتیبان) با sendDocument."""
+    url = f"{API_BASE}/sendDocument"
+    try:
+        with open(path, "rb") as f:
+            resp = _session.post(
+                url,
+                data={"chat_id": chat_id, "caption": caption or ""},
+                files={"document": (os.path.basename(path), f)},
+                timeout=180,
+            )
+        data = resp.json()
+    except (requests.RequestException, ValueError, OSError) as e:
+        log.warning("sendDocument failed: %s", e)
+        return {"ok": False, "error": str(e)}
+    if not data.get("ok"):
+        log.warning("bale api error on sendDocument: %s", data)
+    return data
+
+
+def get_file(file_id: str):
+    return _call("getFile", {"file_id": file_id})
+
+
+def download_file(file_path: str, dest: str, max_bytes: int = 50 * 1024 * 1024) -> bool:
+    """فایل ارسال‌شده به ربات را از سرور بله دانلود می‌کند. True اگر موفق بود."""
+    url = f"https://tapi.bale.ai/file/bot{BALE_TOKEN}/{file_path}"
+    try:
+        with _session.get(url, stream=True, timeout=120) as resp:
+            if resp.status_code != 200:
+                log.warning("download_file status %s", resp.status_code)
+                return False
+            size = 0
+            with open(dest, "wb") as f:
+                for chunk in resp.iter_content(65536):
+                    size += len(chunk)
+                    if size > max_bytes:
+                        return False
+                    f.write(chunk)
+        return True
+    except (requests.RequestException, OSError) as e:
+        log.warning("download_file failed: %s", e)
+        return False

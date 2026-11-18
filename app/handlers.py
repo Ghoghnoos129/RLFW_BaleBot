@@ -6,16 +6,19 @@ import hmac
 import logging
 import time
 
-from app import admin, auth, db, jdate, keyboards, league, texts, utils
+import math
+
+from app import admin, auth, backup, db, jdate, keyboards, league, texts, utils
 from app.bale_api import answer_callback_query, edit_message_text, edit_or_send, send_long, send_message
 from app.config import ADMIN_IDS, ADMIN_SETUP_CODE, MAX_MINUTES_PER_ENTRY
-from app.keyboards import inline
+from app.keyboards import cancel_kb, inline
 
 log = logging.getLogger("handlers")
 
 # مرحله‌های ثبت‌نام (قابل رد‌شدن با دکمه‌های منو نیستند؛ فقط با /start یا «انصراف» تمام می‌شوند)
 REG_STATES = {"await_password", "await_name", "await_spouse", "await_children", "await_card"}
 CANCEL_WORDS = {"انصراف", "❌ انصراف", "/cancel", "/لغو"}
+LOG_PAGE_SIZE = 5
 MAX_PASSWORD_TRIES = 5
 BLOCK_SECONDS = 600
 
@@ -44,15 +47,15 @@ def _next_missing(u):
 def _begin_state(chat_id, user_id, state, note=""):
     db.set_user_flow(user_id, state)
     if state == "await_password":
-        send_message(chat_id, texts.WELCOME + "\n\n" + texts.ASK_PASSWORD)
+        send_message(chat_id, texts.WELCOME + "\n\n" + texts.ASK_PASSWORD, reply_markup=cancel_kb())
     elif state == "await_name":
-        send_message(chat_id, note + texts.ASK_NAME)
+        send_message(chat_id, note + texts.ASK_NAME, reply_markup=cancel_kb())
     elif state == "await_spouse":
-        send_message(chat_id, note + texts.ASK_SPOUSE)
+        send_message(chat_id, note + texts.ASK_SPOUSE, reply_markup=cancel_kb())
     elif state == "await_children":
         send_message(chat_id, note + texts.ASK_CHILDREN, reply_markup=keyboards.yes_no_children())
     elif state == "await_card":
-        send_message(chat_id, note + texts.ASK_CARD)
+        send_message(chat_id, note + texts.ASK_CARD, reply_markup=cancel_kb())
 
 
 def _advance_registration(chat_id, user_id):
@@ -96,12 +99,12 @@ def _handle_registration(chat_id, user_id, state, data, text, username):
             send_message(chat_id, texts.TOO_MANY_ATTEMPTS)
         else:
             db.set_user_flow(user_id, "await_password", str(fails))
-            send_message(chat_id, texts.WRONG_PASSWORD.format(left=MAX_PASSWORD_TRIES - fails))
+            send_message(chat_id, texts.WRONG_PASSWORD.format(left=MAX_PASSWORD_TRIES - fails), reply_markup=cancel_kb())
         return
 
     if state in ("await_name", "await_spouse"):
         if not text or text.startswith("/") or len(text) > 80:
-            send_message(chat_id, texts.INVALID_TEXT)
+            send_message(chat_id, texts.INVALID_TEXT, reply_markup=cancel_kb())
             return
         if state == "await_name":
             db.upsert_user(user_id, full_name=text, username=username)
@@ -117,7 +120,7 @@ def _handle_registration(chat_id, user_id, state, data, text, username):
     if state == "await_card":
         card = utils.parse_card(text)
         if not card:
-            send_message(chat_id, texts.INVALID_CARD)
+            send_message(chat_id, texts.INVALID_CARD, reply_markup=cancel_kb())
             return
         db.update_user(user_id, card_number=card)
         _advance_registration(chat_id, user_id)
@@ -128,17 +131,29 @@ def _handle_registration(chat_id, user_id, state, data, text, username):
 #  اصلاح مطالعه و کتاب‌ها
 # ============================================================
 
-def _logs_menu(chat_id, user_id, season, message_id=None):
-    logs = db.recent_logs(user_id, season["id"], 8)
+def _logs_menu(chat_id, user_id, season, message_id=None, page=0):
+    """لیست ثبت‌های مطالعه‌ی کاربر، ۵ تا در هر صفحه، با دکمه‌ی صفحه قبل/بعد."""
+    total = db.count_logs(user_id, season["id"])
     books = db.completed_books(user_id, season["id"])
-    if not logs and not books:
+    if not total and not books:
         edit_or_send(chat_id, message_id, texts.NOTHING_TO_EDIT)
         return
-    rows = [[(f"⏱ {l['minutes']} دقیقه — {jdate.fmt_datetime(l['created_at'])}", f"log:{l['id']}")] for l in logs]
+    pages = max(1, math.ceil(total / LOG_PAGE_SIZE))
+    page = min(max(page, 0), pages - 1)
+    logs = db.recent_logs(user_id, season["id"], LOG_PAGE_SIZE, page * LOG_PAGE_SIZE)
+    rows = [[(f"⏱ {l['minutes']} دقیقه — {jdate.fmt_datetime(l['created_at'])}", f"log:{l['id']}:{page}")] for l in logs]
+    nav = []
+    if page > 0:
+        nav.append(("◀️ صفحه قبل", f"logs:p:{page - 1}"))
+    if page < pages - 1:
+        nav.append(("صفحه بعد ▶️", f"logs:p:{page + 1}"))
+    if nav:
+        rows.append(nav)
     if books:
         rows.append([("📚 کتاب‌های ثبت‌شده‌ی من", "bk:list")])
     text = (f"✏️ اصلاح مطالعه — {season['name']}\n\n"
-            "آخرین ثبت‌های شما را می‌بینید. روی هر مورد بزنید تا عدد آن را اصلاح یا حذف کنید.")
+            f"ثبت‌های شما (جدیدترین اول) — صفحه {page + 1} از {pages} — مجموع {total} ثبت\n"
+            "روی هر مورد بزنید تا عدد آن را اصلاح یا حذف کنید.")
     edit_or_send(chat_id, message_id, text, inline(rows))
 
 
@@ -210,6 +225,13 @@ def handle_message(message: dict):
     state = flow["state"] if flow else None
     flow_data = flow["data"] if flow else ""
 
+    # ---------- فایل ارسالی (فقط برای بازیابی پشتیبان توسط مدیر اصلی) ----------
+    doc = message.get("document")
+    if doc:
+        if state == "admin_restore_wait" and auth.is_super_admin(user_id):
+            admin.handle_restore_document(chat_id, user_id, doc)
+        return
+
     # ---------- انصراف ----------
     if text in CANCEL_WORDS:
         db.clear_user_flow(user_id)
@@ -227,7 +249,7 @@ def handle_message(message: dict):
     # ---------- مدیر ----------
     if is_admin:
         if text == keyboards.BTN_ADMIN:
-            admin.show_panel(chat_id)
+            admin.show_panel(chat_id, user_id=user_id)
             return
         if text.startswith("/") and admin.handle_command(chat_id, user_id, text):
             return
@@ -285,10 +307,10 @@ def handle_message(message: dict):
             return
         minutes = utils.parse_int(text)
         if minutes is None or minutes <= 0:
-            send_message(chat_id, texts.INVALID_MINUTES)
+            send_message(chat_id, texts.INVALID_MINUTES, reply_markup=cancel_kb())
             return
         if minutes > MAX_MINUTES_PER_ENTRY:
-            send_message(chat_id, texts.TOO_MANY_MINUTES.format(max=MAX_MINUTES_PER_ENTRY))
+            send_message(chat_id, texts.TOO_MANY_MINUTES.format(max=MAX_MINUTES_PER_ENTRY), reply_markup=cancel_kb())
             return
         log_id = db.add_reading_log(user_id, season["id"], minutes)
         db.clear_user_flow(user_id)
@@ -313,10 +335,10 @@ def handle_message(message: dict):
             return
         minutes = utils.parse_int(text)
         if minutes is None or minutes <= 0:
-            send_message(chat_id, texts.INVALID_MINUTES)
+            send_message(chat_id, texts.INVALID_MINUTES, reply_markup=cancel_kb())
             return
         if minutes > MAX_MINUTES_PER_ENTRY:
-            send_message(chat_id, texts.TOO_MANY_MINUTES.format(max=MAX_MINUTES_PER_ENTRY))
+            send_message(chat_id, texts.TOO_MANY_MINUTES.format(max=MAX_MINUTES_PER_ENTRY), reply_markup=cancel_kb())
             return
         db.update_log_minutes(log_row["id"], minutes)
         db.clear_user_flow(user_id)
@@ -326,7 +348,7 @@ def handle_message(message: dict):
 
     if state in ("edit_name", "edit_spouse"):
         if not text or len(text) > 80:
-            send_message(chat_id, texts.INVALID_TEXT)
+            send_message(chat_id, texts.INVALID_TEXT, reply_markup=cancel_kb())
             return
         db.update_user(user_id, **{"full_name" if state == "edit_name" else "spouse_name": text})
         db.clear_user_flow(user_id)
@@ -337,7 +359,7 @@ def handle_message(message: dict):
     if state == "edit_card":
         card = utils.parse_card(text)
         if not card:
-            send_message(chat_id, texts.INVALID_CARD)
+            send_message(chat_id, texts.INVALID_CARD, reply_markup=cancel_kb())
             return
         db.update_user(user_id, card_number=card)
         db.clear_user_flow(user_id)
@@ -352,7 +374,7 @@ def handle_message(message: dict):
             send_message(chat_id, texts.no_active_text(db.get_upcoming_season()), reply_markup=_menu(user_id))
             return
         db.set_user_flow(user_id, "await_minutes")
-        send_message(chat_id, texts.ASK_MINUTES, reply_markup=_menu(user_id))
+        send_message(chat_id, texts.ASK_MINUTES, reply_markup=cancel_kb())
         return
 
     if text == keyboards.BTN_EDIT:
@@ -415,6 +437,21 @@ def handle_callback_query(cb: dict):
     chat_id = message.get("chat", {}).get("id")
     message_id = message.get("message_id")
 
+    # ---------- دکمه‌ی شیشه‌ای «❌ انصراف» (برای کاربر و مدیر، در همه‌ی مرحله‌ها) ----------
+    if data == keyboards.CANCEL_DATA:
+        flow = db.get_user_flow(user_id)
+        was_state = flow["state"] if flow else None
+        db.clear_user_flow(user_id)
+        if was_state == "admin_restore_wait":
+            backup.remove_quietly(backup.PENDING_ZIP, backup.PENDING_DB)
+        answer_callback_query(cb_id)
+        edit_or_send(
+            chat_id, message_id,
+            "ثبت‌نام متوقف شد. هر وقت خواستید دوباره /start را بزنید." if was_state in REG_STATES
+            else "❌ " + texts.CANCELED,
+        )
+        return
+
     if data.startswith("adm:"):
         admin.handle_callback(cb)
         return
@@ -453,13 +490,13 @@ def handle_callback_query(cb: dict):
         field = data.split(":", 1)[1]
         if field == "name":
             db.set_user_flow(user_id, "edit_name")
-            send_message(chat_id, "نام و نام خانوادگی جدید را ارسال کنید:\n(برای انصراف: «❌ انصراف»)")
+            send_message(chat_id, "نام و نام خانوادگی جدید را ارسال کنید:\n(برای انصراف: «❌ انصراف»)", reply_markup=cancel_kb())
         elif field == "spouse":
             db.set_user_flow(user_id, "edit_spouse")
-            send_message(chat_id, "نام و نام خانوادگی همسر را ارسال کنید:\n(برای انصراف: «❌ انصراف»)")
+            send_message(chat_id, "نام و نام خانوادگی همسر را ارسال کنید:\n(برای انصراف: «❌ انصراف»)", reply_markup=cancel_kb())
         elif field == "card":
             db.set_user_flow(user_id, "edit_card")
-            send_message(chat_id, texts.ASK_CARD + "\n(برای انصراف: «❌ انصراف»)")
+            send_message(chat_id, texts.ASK_CARD + "\n(برای انصراف: «❌ انصراف»)", reply_markup=cancel_kb())
         elif field == "child":
             send_message(
                 chat_id,
@@ -498,15 +535,19 @@ def handle_callback_query(cb: dict):
         return
 
     # ---------- اصلاح مطالعه ----------
-    if data == "logs:list":
+    if data == "logs:list" or data.startswith("logs:p:"):
         answer_callback_query(cb_id)
+        page = int(data.rsplit(":", 1)[1]) if data.startswith("logs:p:") and data.rsplit(":", 1)[1].isdigit() else 0
         if season:
-            _logs_menu(chat_id, user_id, season, message_id)
+            _logs_menu(chat_id, user_id, season, message_id, page)
         return
 
     if data.startswith(("log:", "logedit:", "logdel:", "logdelyes:")):
         answer_callback_query(cb_id)
-        action, _, raw_id = data.partition(":")
+        action, _, rest = data.partition(":")
+        raw_id, _, raw_page = rest.partition(":")
+        page = int(raw_page) if raw_page.isdigit() else 0
+        back = inline([[("↩️ بازگشت به لیست", f"logs:p:{page}")]])
         log_row = db.get_log(int(raw_id)) if raw_id.isdigit() else None
         if (not season or not log_row or log_row["user_id"] != user_id
                 or log_row["season_id"] != season["id"]):
@@ -517,21 +558,21 @@ def handle_callback_query(cb: dict):
             edit_or_send(
                 chat_id, message_id,
                 f"⏱ {log_row['minutes']} دقیقه — {when}\nچه کاری انجام شود؟",
-                inline([[("✏️ تغییر عدد", f"logedit:{log_row['id']}"), ("🗑 حذف", f"logdel:{log_row['id']}")],
-                        [("↩️ بازگشت", "logs:list")]]),
+                inline([[("✏️ تغییر عدد", f"logedit:{log_row['id']}:{page}"), ("🗑 حذف", f"logdel:{log_row['id']}:{page}")],
+                        [("↩️ بازگشت", f"logs:p:{page}")]]),
             )
         elif action == "logedit":
             db.set_user_flow(user_id, "edit_minutes", str(log_row["id"]))
-            send_message(chat_id, texts.ASK_EDIT_MINUTES.format(current=log_row["minutes"]))
+            send_message(chat_id, texts.ASK_EDIT_MINUTES.format(current=log_row["minutes"]), reply_markup=cancel_kb())
         elif action == "logdel":
             edit_or_send(
                 chat_id, message_id,
                 f"ثبت «{log_row['minutes']} دقیقه — {when}» حذف شود؟",
-                keyboards.confirm_keyboard(f"logdelyes:{log_row['id']}", "logs:list"),
+                keyboards.confirm_keyboard(f"logdelyes:{log_row['id']}:{page}", f"logs:p:{page}"),
             )
         else:  # logdelyes
             db.delete_log(log_row["id"])
-            edit_or_send(chat_id, message_id, texts.LOG_DELETED, inline([[("↩️ بازگشت به لیست", "logs:list")]]))
+            edit_or_send(chat_id, message_id, texts.LOG_DELETED, back)
         return
 
     if data == "bk:list":

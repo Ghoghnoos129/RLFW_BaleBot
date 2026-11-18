@@ -1,6 +1,7 @@
 """
 ابزارهای کمکی: تبدیل ارقام فارسی، خواندن عدد، شماره کارت، تکه‌کردن پیام‌های بلند.
 """
+import re
 
 _DIGITS = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
 
@@ -65,3 +66,28 @@ def split_text(text: str, limit: int = 3500):
     if cur:
         chunks.append(cur)
     return chunks
+
+
+def parse_id_list(text: str, max_range: int = 500):
+    """
+    فهرست شناسه‌ها را از متن می‌خواند: جداکننده فاصله/کاما/خط جدید، و بازه مثل 3-6.
+    برمی‌گرداند: (لیست شناسه‌های یکتا به ترتیب ورود، لیست توکن‌های نامعتبر)
+    """
+    s = normalize_digits(text or "")
+    for ch in ("،", "؛", ";", ","):
+        s = s.replace(ch, " ")
+    ids, bad = [], []
+    for tok in s.split():
+        tok = tok.lstrip("#")
+        m = re.fullmatch(r"(\d+)[-–—](\d+)", tok)
+        if m and tok.isascii():
+            a, b = int(m.group(1)), int(m.group(2))
+            if a <= b and b - a <= max_range:
+                ids.extend(range(a, b + 1))
+            else:
+                bad.append(tok)
+        elif tok.isascii() and tok.isdigit():
+            ids.append(int(tok))
+        else:
+            bad.append(tok)
+    return list(dict.fromkeys(ids)), bad

@@ -120,6 +120,7 @@ def init_db():
         _ensure_column(conn, "seasons", "start_date", "TEXT")
         _ensure_column(conn, "seasons", "end_date", "TEXT")
         _ensure_column(conn, "seasons", "announced_prize", "INTEGER")
+        _ensure_column(conn, "admins", "can_wipe", "INTEGER NOT NULL DEFAULT 0")
 
 
 def _ensure_column(conn, table: str, column: str, ddl: str):
@@ -275,6 +276,32 @@ def all_users():
         ).fetchall()
 
 
+def delete_user(user_id: int):
+    """کاربر را همراه با همه‌ی مطالعه‌ها، کتاب‌ها و نتایج ذخیره‌شده‌اش (در همه‌ی فصل‌ها) پاک می‌کند."""
+    with get_conn() as conn:
+        for table in ("season_results", "book_completions", "reading_logs", "user_state"):
+            conn.execute(f"DELETE FROM {table} WHERE user_id=?", (user_id,))
+        conn.execute("DELETE FROM users WHERE user_id=?", (user_id,))
+
+
+def wipe_all(full: bool = False):
+    """
+    حذف داده‌ها. full=False: همه‌ی فصل‌ها و تاریخچه (مطالعه‌ها، کتاب‌ها، نتایج).
+    full=True: علاوه بر آن، همه‌ی کاربران هم حذف می‌شوند.
+    مدیرها و قوانین/تنظیمات (رمز ثبت‌نام، اعداد قوانین، متن قوانین) هرگز پاک نمی‌شوند.
+    """
+    with get_conn() as conn:
+        for table in ("season_results", "book_completions", "reading_logs", "special_books", "seasons"):
+            conn.execute(f"DELETE FROM {table}")
+        conn.execute("DELETE FROM bot_state WHERE key LIKE 'end_reminded:%'")
+        if full:
+            conn.execute("DELETE FROM users")
+            conn.execute("DELETE FROM user_state")
+            conn.execute("DELETE FROM bot_state WHERE key LIKE 'pwblock:%'")
+        conn.execute("DELETE FROM sqlite_sequence WHERE name IN "
+                     "('seasons','special_books','reading_logs','book_completions','season_results')")
+
+
 def count_users() -> int:
     with get_conn() as conn:
         return conn.execute(
@@ -320,6 +347,18 @@ def remove_admin(user_id: int) -> bool:
             "DELETE FROM admins WHERE user_id=? AND is_super=0", (user_id,)
         )
         return cur.rowcount > 0
+
+
+def set_admin_can_wipe(user_id: int, allowed: bool):
+    """اجازه‌ی «حذف همه‌ی داده‌ها» برای یک ادمین (فقط مدیر اصلی این اجازه را می‌دهد)."""
+    with get_conn() as conn:
+        conn.execute("UPDATE admins SET can_wipe=? WHERE user_id=?", (1 if allowed else 0, user_id))
+
+
+def db_admin_can_wipe(user_id: int) -> bool:
+    with get_conn() as conn:
+        row = conn.execute("SELECT can_wipe FROM admins WHERE user_id=?", (user_id,)).fetchone()
+        return bool(row and row["can_wipe"])
 
 
 def get_admin(user_id: int):
@@ -442,6 +481,16 @@ def end_season(season_id: int):
 
 # ---------- special books ----------
 
+def add_books(season_id: int, items) -> int:
+    """items: لیستی از (عنوان, امتیاز)؛ همه در یک تراکنش اضافه می‌شوند. تعداد افزوده‌شده را برمی‌گرداند."""
+    with get_conn() as conn:
+        conn.executemany(
+            "INSERT INTO special_books(season_id, title, points) VALUES (?, ?, ?)",
+            [(season_id, t, p) for t, p in items],
+        )
+        return len(items)
+
+
 def add_book(season_id: int, title: str, points: int) -> int:
     with get_conn() as conn:
         cur = conn.execute(
@@ -496,12 +545,20 @@ def delete_log(log_id: int):
         conn.execute("DELETE FROM reading_logs WHERE id=?", (log_id,))
 
 
-def recent_logs(user_id: int, season_id: int, limit: int = 8):
+def recent_logs(user_id: int, season_id: int, limit: int = 5, offset: int = 0):
     with get_conn() as conn:
         return conn.execute(
-            "SELECT * FROM reading_logs WHERE user_id=? AND season_id=? ORDER BY id DESC LIMIT ?",
-            (user_id, season_id, limit),
+            "SELECT * FROM reading_logs WHERE user_id=? AND season_id=? ORDER BY id DESC LIMIT ? OFFSET ?",
+            (user_id, season_id, limit, offset),
         ).fetchall()
+
+
+def count_logs(user_id: int, season_id: int) -> int:
+    with get_conn() as conn:
+        return conn.execute(
+            "SELECT COUNT(*) AS c FROM reading_logs WHERE user_id=? AND season_id=?",
+            (user_id, season_id),
+        ).fetchone()["c"]
 
 
 def total_minutes(user_id: int, season_id: int) -> int:
