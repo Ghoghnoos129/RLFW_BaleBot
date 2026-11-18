@@ -2,24 +2,45 @@
 کیبوردهای شیشه‌ای (inline) و کیبورد متنی اصلی منو.
 """
 
-MAIN_MENU = {
-    "keyboard": [
-        [{"text": "📖 ثبت مطالعه"}, {"text": "🏆 کارنامه من"}],
-        [{"text": "📚 کتاب‌های ویژه این فصل"}, {"text": "❓ راهنما"}],
-    ],
-    "resize_keyboard": True,
+BTN_LOG = "📖 ثبت مطالعه"
+BTN_EDIT = "✏️ اصلاح مطالعه"
+BTN_REPORT = "🏆 کارنامه من"
+BTN_STATUS = "🏁 وضعیت لیگ"
+BTN_BOOKS = "📚 کتاب‌های ویژه این فصل"
+BTN_RULES = "📜 قوانین لیگ"
+BTN_PROFILE = "👤 مشخصات من"
+BTN_HELP = "❓ راهنما"
+BTN_ADMIN = "⚙️ پنل مدیریت"
+
+ALL_BUTTONS = {
+    BTN_LOG, BTN_EDIT, BTN_REPORT, BTN_STATUS, BTN_BOOKS,
+    BTN_RULES, BTN_PROFILE, BTN_HELP, BTN_ADMIN,
 }
 
 
-def yes_no_children():
+def main_menu(is_admin: bool = False) -> dict:
+    rows = [
+        [{"text": BTN_LOG}, {"text": BTN_EDIT}],
+        [{"text": BTN_REPORT}, {"text": BTN_STATUS}],
+        [{"text": BTN_BOOKS}, {"text": BTN_RULES}],
+        [{"text": BTN_PROFILE}, {"text": BTN_HELP}],
+    ]
+    if is_admin:
+        rows.append([{"text": BTN_ADMIN}])
+    return {"keyboard": rows, "resize_keyboard": True}
+
+
+def inline(rows) -> dict:
+    """rows: لیستی از ردیف‌ها؛ هر ردیف لیستی از (متن, callback_data)."""
     return {
         "inline_keyboard": [
-            [
-                {"text": "دارم", "callback_data": "children_yes"},
-                {"text": "ندارم", "callback_data": "children_no"},
-            ]
+            [{"text": text, "callback_data": data} for text, data in row] for row in rows
         ]
     }
+
+
+def yes_no_children(prefix: str = "children"):
+    return inline([[("دارم", f"{prefix}_yes"), ("ندارم", f"{prefix}_no")]])
 
 
 def book_choice_keyboard(books, prefix="book_done"):
@@ -29,11 +50,4 @@ def book_choice_keyboard(books, prefix="book_done"):
 
 
 def confirm_keyboard(yes_data: str, no_data: str):
-    return {
-        "inline_keyboard": [
-            [
-                {"text": "✅ بله، مطمئنم", "callback_data": yes_data},
-                {"text": "❌ انصراف", "callback_data": no_data},
-            ]
-        ]
-    }
+    return inline([[("✅ بله، مطمئنم", yes_data), ("❌ انصراف", no_data)]])

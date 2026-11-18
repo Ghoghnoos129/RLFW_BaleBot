@@ -7,6 +7,7 @@ import logging
 import requests
 
 from app.config import API_BASE
+from app.utils import split_text
 
 log = logging.getLogger("bale_api")
 
@@ -64,3 +65,24 @@ def edit_message_text(chat_id: int, message_id: int, text: str, reply_markup: di
 
 def get_me():
     return _call("getMe", {})
+
+
+def send_long(chat_id: int, text: str, reply_markup: dict = None):
+    """پیام‌های بلند را به چند پیام تقسیم می‌کند؛ کیبورد (اگر باشد) روی آخرین پیام قرار می‌گیرد."""
+    chunks = split_text(text)
+    result = {"ok": False}
+    for i, chunk in enumerate(chunks):
+        markup = reply_markup if i == len(chunks) - 1 else None
+        result = send_message(chat_id, chunk, reply_markup=markup)
+    return result
+
+
+def edit_or_send(chat_id: int, message_id, text: str, reply_markup: dict = None):
+    """پیام موجود را ویرایش می‌کند (برای پنل‌های دکمه‌ای)؛ اگر نشد پیام تازه می‌فرستد."""
+    if message_id:
+        resp = edit_message_text(chat_id, message_id, text, reply_markup)
+        if resp.get("ok"):
+            return resp
+        if "not modified" in str(resp.get("description", "")).lower():
+            return resp
+    return send_message(chat_id, text, reply_markup=reply_markup)

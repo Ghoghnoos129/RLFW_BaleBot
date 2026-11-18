@@ -32,19 +32,31 @@ LOG_PATH = os.getenv("LOG_PATH", "./data/bot.log")
 HEARTBEAT_PATH = os.getenv("HEARTBEAT_PATH", "./data/heartbeat")
 SEASON_PREFIX = os.getenv("DEFAULT_SEASON_PREFIX", "فصل")
 
+VERSION = "0.2"
+
 API_BASE = f"https://tapi.bale.ai/bot{BALE_TOKEN}"
 
-# --- قوانین امتیازدهی لیگ کتابخوانی (طبق طرح) ---
-MINUTES_PER_POINT_WITH_CHILD = 20
-MINUTES_PER_POINT_NO_CHILD = 25
-MAX_POINTS_PER_SEASON = 150
-POINTS_PER_CODE = 5
+# رمز ثبت‌نام کاربران (مقدار اولیه). مدیر بعداً می‌تواند آن را از «پنل مدیریت ← رمز ثبت‌نام» در بله
+# تغییر دهد؛ مقدار تعیین‌شده در بله بر این مقدار اولویت دارد. اگر رمزی تعیین نشده باشد ثبت‌نام بسته است.
+REGISTRATION_PASSWORD = os.getenv("REGISTRATION_PASSWORD", "").strip()
 
-# --- قوانین جایزه ---
-BASE_PRIZE = 500_000
-BONUS_PER_10_CODES = 100_000
-MAX_PRIZE_PER_WINNER = 1_500_000
-NUMBER_OF_WINNERS = 2
+# حداکثر دقیقه مجاز در هر بار ثبت مطالعه (برای جلوگیری از اشتباه تایپی؛ ۲۴ ساعت)
+MAX_MINUTES_PER_ENTRY = 1440
+
+# --- مقادیر پیش‌فرض قوانین لیگ (طبق طرح) ---
+# از نسخه ۰.۲ مدیر می‌تواند همه این مقادیر را از داخل بله (پنل مدیریت ← قوانین و فرمول‌ها) تغییر دهد.
+# مقدار تغییرداده‌شده در دیتابیس ذخیره می‌شود و بر این پیش‌فرض‌ها اولویت دارد.
+DEFAULT_RULES = {
+    "minutes_per_point_child": 20,     # دقیقه مطالعه برای هر امتیاز (دارای فرزند)
+    "minutes_per_point_nochild": 25,   # دقیقه مطالعه برای هر امتیاز (بدون فرزند)
+    "max_points": 150,                 # سقف امتیاز هر فصل
+    "points_per_code": 5,              # امتیاز لازم برای هر کد قرعه‌کشی
+    "base_prize": 500_000,             # جایزه پایه هر برنده (تومان)
+    "bonus_per_step": 100_000,         # افزایش جایزه هر برنده به ازای هر پله (تومان)
+    "codes_per_step": 10,              # هر چند کد (مجموع شرکت‌کنندگان) یک پله افزایش جایزه است
+    "max_prize": 1_500_000,            # سقف جایزه هر برنده (تومان)
+    "winners": 2,                      # تعداد برندگان قرعه‌کشی
+}
 
 if not BALE_TOKEN:
     raise SystemExit(

@@ -9,7 +9,8 @@ import time
 
 from app import db
 from app.bale_api import get_updates, get_me
-from app.config import LOG_PATH, HEARTBEAT_PATH
+from app import league
+from app.config import LOG_PATH, HEARTBEAT_PATH, VERSION
 from app.handlers import handle_message, handle_callback_query
 
 os.makedirs(os.path.dirname(LOG_PATH) or ".", exist_ok=True)
@@ -47,8 +48,17 @@ def process_update(update: dict):
         log.exception("error while processing update: %s", update)
 
 
+def run_scheduled_tasks():
+    """شروع/پایان خودکار فصل‌ها بر اساس تاریخ شروع و پایان (هر دور از حلقه‌ی اصلی)."""
+    try:
+        league.tick()
+    except Exception:
+        log.exception("خطا در کارهای زمان‌بندی‌شده‌ی فصل")
+
+
 def main():
     db.init_db()
+    log.info("ربات لیگ کتابخوانی — نسخه %s", VERSION)
 
     me = get_me()
     if me.get("ok"):
@@ -66,6 +76,7 @@ def main():
     while True:
         try:
             _write_heartbeat()
+            run_scheduled_tasks()
             result = get_updates(offset=offset)
             if not result.get("ok"):
                 time.sleep(backoff)

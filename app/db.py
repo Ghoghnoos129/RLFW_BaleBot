@@ -3,16 +3,17 @@
 """
 import os
 import sqlite3
-import datetime as dt
 from contextlib import contextmanager
 
-from app.config import DB_PATH
+from app.config import DB_PATH, DEFAULT_RULES, REGISTRATION_PASSWORD
+from app import jdate
 
 os.makedirs(os.path.dirname(DB_PATH) or ".", exist_ok=True)
 
 
 def now() -> str:
-    return dt.datetime.now().isoformat(timespec="seconds")
+    """زمان فعلی به وقت تهران (مستقل از ساعت سرور)."""
+    return jdate.now_iso()
 
 
 @contextmanager
@@ -41,7 +42,10 @@ def init_db():
                 full_name TEXT,
                 has_children INTEGER,
                 registered_at TEXT,
-                is_active INTEGER DEFAULT 1
+                is_active INTEGER DEFAULT 1,
+                spouse_name TEXT,
+                card_number TEXT,
+                username TEXT
             );
 
             CREATE TABLE IF NOT EXISTS user_state (
@@ -60,9 +64,12 @@ def init_db():
             CREATE TABLE IF NOT EXISTS seasons (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
-                status TEXT NOT NULL DEFAULT 'active', -- active | ended
+                status TEXT NOT NULL DEFAULT 'scheduled', -- scheduled | active | ended
                 started_at TEXT,
-                ended_at TEXT
+                ended_at TEXT,
+                start_date TEXT,      -- تاریخ شروع (میلادی ISO، نمایش شمسی)
+                end_date TEXT,        -- تاریخ پایان (میلادی ISO، نمایش شمسی)
+                announced_prize INTEGER  -- آخرین جایزه‌ای که به کاربران اعلام شده
             );
 
             CREATE TABLE IF NOT EXISTS special_books (
@@ -99,8 +106,26 @@ def init_db():
                 rank INTEGER,
                 prize INTEGER DEFAULT 0
             );
+
+            CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value TEXT
+            );
             """
         )
+        # مهاجرت دیتابیس نسخه ۰.۱ به ۰.۲ (ستون‌های جدید؛ داده‌های قبلی دست‌نخورده می‌مانند)
+        _ensure_column(conn, "users", "spouse_name", "TEXT")
+        _ensure_column(conn, "users", "card_number", "TEXT")
+        _ensure_column(conn, "users", "username", "TEXT")
+        _ensure_column(conn, "seasons", "start_date", "TEXT")
+        _ensure_column(conn, "seasons", "end_date", "TEXT")
+        _ensure_column(conn, "seasons", "announced_prize", "INTEGER")
+
+
+def _ensure_column(conn, table: str, column: str, ddl: str):
+    cols = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
+    if column not in cols:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
 
 
 # ---------- bot_state (برای offset گرفتن آپدیت‌های بله) ----------
@@ -120,32 +145,141 @@ def set_state(key: str, value: str):
         )
 
 
+# ---------- settings (قوانین و تنظیمات قابل‌تغییر توسط مدیر) ----------
+
+def get_setting(key: str, default=None):
+    with get_conn() as conn:
+        row = conn.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
+        return row["value"] if row else default
+
+
+def set_setting(key: str, value: str):
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO settings(key, value) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            (key, value),
+        )
+
+
+def delete_setting(key: str):
+    with get_conn() as conn:
+        conn.execute("DELETE FROM settings WHERE key=?", (key,))
+
+
+def get_rules() -> dict:
+    """قوانین فعلی لیگ: پیش‌فرض‌های config.py که با مقدارهای تنظیم‌شده توسط مدیر جایگزین می‌شوند."""
+    rules = dict(DEFAULT_RULES)
+    with get_conn() as conn:
+        for row in conn.execute("SELECT key, value FROM settings WHERE key LIKE 'rule:%'"):
+            k = row["key"][5:]
+            if k in rules:
+                try:
+                    rules[k] = int(row["value"])
+                except (TypeError, ValueError):
+                    pass
+    return rules
+
+
+def set_rule(key: str, value: int):
+    if key not in DEFAULT_RULES:
+        raise KeyError(key)
+    set_setting(f"rule:{key}", str(int(value)))
+
+
+def get_rules_text():
+    """متن سفارشی قوانین (اگر مدیر تعیین کرده باشد)؛ وگرنه None و متن خودکار ساخته می‌شود."""
+    v = get_setting("rules_text")
+    return v if v else None
+
+
+def set_rules_text(text):
+    if text:
+        set_setting("rules_text", text)
+    else:
+        delete_setting("rules_text")
+
+
+def get_registration_password() -> str:
+    """رمز ثبت‌نام. مقدار ذخیره‌شده در بله (حتی خالی) بر مقدار .env اولویت دارد. خالی = ثبت‌نام بسته."""
+    v = get_setting("registration_password")
+    if v is None:
+        return REGISTRATION_PASSWORD
+    return v
+
+
+def set_registration_password(pw: str):
+    set_setting("registration_password", pw or "")
+
+
+def auto_end_enabled() -> bool:
+    return get_setting("auto_end", "1") == "1"
+
+
+def set_auto_end(enabled: bool):
+    set_setting("auto_end", "1" if enabled else "0")
+
+
 # ---------- users ----------
+
+_USER_FIELDS = {"full_name", "spouse_name", "has_children", "card_number", "username"}
+
 
 def get_user(user_id: int):
     with get_conn() as conn:
         return conn.execute("SELECT * FROM users WHERE user_id=?", (user_id,)).fetchone()
 
 
-def upsert_user(user_id: int, full_name: str = None, has_children: int = None):
+def upsert_user(user_id: int, full_name: str = None, username: str = None):
+    """اگر کاربر نبود می‌سازد؛ در غیر این صورت فقط مقدارهای داده‌شده را به‌روز می‌کند."""
     with get_conn() as conn:
         existing = conn.execute("SELECT 1 FROM users WHERE user_id=?", (user_id,)).fetchone()
         if existing:
             if full_name is not None:
                 conn.execute("UPDATE users SET full_name=? WHERE user_id=?", (full_name, user_id))
-            if has_children is not None:
-                conn.execute("UPDATE users SET has_children=? WHERE user_id=?", (has_children, user_id))
+            if username is not None:
+                conn.execute("UPDATE users SET username=? WHERE user_id=?", (username, user_id))
         else:
             conn.execute(
-                "INSERT INTO users(user_id, full_name, has_children, registered_at, is_active) "
-                "VALUES (?, ?, ?, ?, 1)",
-                (user_id, full_name, has_children, now()),
+                "INSERT INTO users(user_id, full_name, registered_at, is_active, username) "
+                "VALUES (?, ?, ?, 1, ?)",
+                (user_id, full_name, now(), username),
             )
 
 
-def all_users():
+def update_user(user_id: int, **fields):
+    fields = {k: v for k, v in fields.items() if k in _USER_FIELDS}
+    if not fields:
+        return
+    sets = ", ".join(f"{k}=?" for k in fields)
     with get_conn() as conn:
-        return conn.execute("SELECT * FROM users WHERE is_active=1 ORDER BY registered_at").fetchall()
+        conn.execute(f"UPDATE users SET {sets} WHERE user_id=?", (*fields.values(), user_id))
+
+
+def touch_username(user_id: int, username: str):
+    """آیدی (username) بله کاربر را بی‌سروصدا ذخیره/به‌روز می‌کند (فقط برای کاربر ثبت‌نام‌شده)."""
+    if not username:
+        return
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE users SET username=? WHERE user_id=? AND COALESCE(username,'')<>?",
+            (username, user_id, username),
+        )
+
+
+def all_users():
+    """کاربران فعالی که ثبت‌نامشان به مرحله‌ی انتخاب فرزند رسیده (اعضای لیگ)."""
+    with get_conn() as conn:
+        return conn.execute(
+            "SELECT * FROM users WHERE is_active=1 AND has_children IS NOT NULL ORDER BY registered_at"
+        ).fetchall()
+
+
+def count_users() -> int:
+    with get_conn() as conn:
+        return conn.execute(
+            "SELECT COUNT(*) AS c FROM users WHERE is_active=1 AND has_children IS NOT NULL"
+        ).fetchone()["c"]
 
 
 # ---------- admins (ادمین‌هایی که با کد مخفی ADMIN_SETUP_CODE اضافه شده‌اند) ----------
@@ -221,6 +355,9 @@ def clear_user_flow(user_id: int):
 
 # ---------- seasons ----------
 
+_SEASON_FIELDS = {"name", "start_date", "end_date", "announced_prize"}
+
+
 def get_active_season():
     with get_conn() as conn:
         return conn.execute(
@@ -233,23 +370,74 @@ def get_season(season_id: int):
         return conn.execute("SELECT * FROM seasons WHERE id=?", (season_id,)).fetchone()
 
 
-def create_season(name: str) -> int:
+def get_upcoming_season():
+    """نزدیک‌ترین فصل در انتظار شروع (اگر باشد)."""
     with get_conn() as conn:
-        conn.execute(
-            "UPDATE seasons SET status='ended', ended_at=? WHERE status='active'", (now(),)
-        )
+        return conn.execute(
+            "SELECT * FROM seasons WHERE status='scheduled' "
+            "ORDER BY COALESCE(start_date, '9999'), id LIMIT 1"
+        ).fetchone()
+
+
+def next_due_scheduled(today_iso: str):
+    """فصل در انتظاری که تاریخ شروعش رسیده است."""
+    with get_conn() as conn:
+        return conn.execute(
+            "SELECT * FROM seasons WHERE status='scheduled' AND start_date IS NOT NULL "
+            "AND start_date<=? ORDER BY start_date, id LIMIT 1",
+            (today_iso,),
+        ).fetchone()
+
+
+def list_seasons(limit: int = 12):
+    """فعال‌ها اول، بعد در انتظار، بعد پایان‌یافته‌ها (جدیدترین اول)."""
+    with get_conn() as conn:
+        return conn.execute(
+            """
+            SELECT * FROM seasons
+            ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'scheduled' THEN 1 ELSE 2 END,
+                     COALESCE(start_date, substr(started_at, 1, 10), '') DESC, id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+
+
+def create_season(name: str, start_date: str, end_date: str) -> int:
+    """فصل جدید را در حالت «در انتظار» می‌سازد؛ با رسیدن تاریخ شروع، خودکار فعال می‌شود."""
+    with get_conn() as conn:
         cur = conn.execute(
-            "INSERT INTO seasons(name, status, started_at) VALUES (?, 'active', ?)",
-            (name, now()),
+            "INSERT INTO seasons(name, status, start_date, end_date) VALUES (?, 'scheduled', ?, ?)",
+            (name, start_date, end_date),
         )
         return cur.lastrowid
 
 
-def end_season(season_id: int):
+def update_season(season_id: int, **fields):
+    fields = {k: v for k, v in fields.items() if k in _SEASON_FIELDS}
+    if not fields:
+        return
+    sets = ", ".join(f"{k}=?" for k in fields)
     with get_conn() as conn:
-        conn.execute(
-            "UPDATE seasons SET status='ended', ended_at=? WHERE id=?", (now(), season_id)
-        )
+        conn.execute(f"UPDATE seasons SET {sets} WHERE id=?", (*fields.values(), season_id))
+
+
+def set_season_status(season_id: int, status: str):
+    with get_conn() as conn:
+        if status == "active":
+            conn.execute(
+                "UPDATE seasons SET status='active', started_at=? WHERE id=?", (now(), season_id)
+            )
+        elif status == "ended":
+            conn.execute(
+                "UPDATE seasons SET status='ended', ended_at=? WHERE id=?", (now(), season_id)
+            )
+        else:
+            conn.execute("UPDATE seasons SET status=? WHERE id=?", (status, season_id))
+
+
+def end_season(season_id: int):
+    set_season_status(season_id, "ended")
 
 
 # ---------- special books ----------
@@ -272,6 +460,8 @@ def list_books(season_id: int):
 
 def remove_book(book_id: int):
     with get_conn() as conn:
+        # اول ثبت‌های اتمام این کتاب پاک می‌شود (در نسخه ۰.۱ به دلیل کلید خارجی حذف کتابِ ثبت‌شده خطا می‌داد)
+        conn.execute("DELETE FROM book_completions WHERE book_id=?", (book_id,))
         conn.execute("DELETE FROM special_books WHERE id=?", (book_id,))
 
 
@@ -282,12 +472,36 @@ def get_book(book_id: int):
 
 # ---------- reading logs ----------
 
-def add_reading_log(user_id: int, season_id: int, minutes: int):
+def add_reading_log(user_id: int, season_id: int, minutes: int) -> int:
     with get_conn() as conn:
-        conn.execute(
+        cur = conn.execute(
             "INSERT INTO reading_logs(user_id, season_id, minutes, created_at) VALUES (?, ?, ?, ?)",
             (user_id, season_id, minutes, now()),
         )
+        return cur.lastrowid
+
+
+def get_log(log_id: int):
+    with get_conn() as conn:
+        return conn.execute("SELECT * FROM reading_logs WHERE id=?", (log_id,)).fetchone()
+
+
+def update_log_minutes(log_id: int, minutes: int):
+    with get_conn() as conn:
+        conn.execute("UPDATE reading_logs SET minutes=? WHERE id=?", (minutes, log_id))
+
+
+def delete_log(log_id: int):
+    with get_conn() as conn:
+        conn.execute("DELETE FROM reading_logs WHERE id=?", (log_id,))
+
+
+def recent_logs(user_id: int, season_id: int, limit: int = 8):
+    with get_conn() as conn:
+        return conn.execute(
+            "SELECT * FROM reading_logs WHERE user_id=? AND season_id=? ORDER BY id DESC LIMIT ?",
+            (user_id, season_id, limit),
+        ).fetchall()
 
 
 def total_minutes(user_id: int, season_id: int) -> int:
@@ -313,6 +527,13 @@ def complete_book(user_id: int, season_id: int, book_id: int) -> bool:
             return True
         except sqlite3.IntegrityError:
             return False
+
+
+def uncomplete_book(user_id: int, book_id: int):
+    with get_conn() as conn:
+        conn.execute(
+            "DELETE FROM book_completions WHERE user_id=? AND book_id=?", (user_id, book_id)
+        )
 
 
 def completed_books(user_id: int, season_id: int):
@@ -350,7 +571,7 @@ def season_participants(season_id: int):
     with get_conn() as conn:
         return conn.execute(
             """
-            SELECT u.user_id, u.full_name, u.has_children
+            SELECT u.*
             FROM users u
             WHERE u.user_id IN (
                 SELECT DISTINCT user_id FROM reading_logs WHERE season_id=?
@@ -369,6 +590,21 @@ def save_season_result(season_id, user_id, minutes, points, codes, rank, prize=0
             "VALUES (?, ?, ?, ?, ?, ?, ?)",
             (season_id, user_id, minutes, points, codes, rank, prize),
         )
+
+
+def season_results(season_id: int):
+    """نتایج ذخیره‌شده‌ی یک فصل پایان‌یافته (همراه مشخصات کاربر برای هماهنگی با برندگان)."""
+    with get_conn() as conn:
+        return conn.execute(
+            """
+            SELECT sr.*, u.full_name, u.spouse_name, u.username, u.card_number
+            FROM season_results sr
+            LEFT JOIN users u ON u.user_id = sr.user_id
+            WHERE sr.season_id=?
+            ORDER BY CASE WHEN sr.rank > 0 THEN 0 ELSE 1 END, sr.rank, sr.points DESC
+            """,
+            (season_id,),
+        ).fetchall()
 
 
 def total_prize_won(user_id: int) -> int:
