@@ -1,74 +1,62 @@
-# ایمیج پایه.
-#
-# نکته مهم: Docker هیچ راهی برای «اول رجیستری اصلی را امتحان کن، اگر نشد خودکار برو سراغ
-# آینه» ندارد مگر با تنظیم registry-mirror در خودِ Docker daemon روی سرور (که نیاز به
-# دسترسی سرور/SSH دارد). بنابراین این مقدار مستقیم به یک رجیستری/ایمیج مشخص اشاره می‌کند
-# و اگر آن یکی در دسترس نبود باید دستی عوض شود (مستقیم همین‌جا، یا با BASE_IMAGE در
-# .env / Build Variable در Coolify).
-#
-# پیش‌فرض فعلی عمداً ایمیج رسمی Docker Hub است: آینه‌های ایرانی (arvancloud، ththt.ir،
-# iranserver و مشابه) خودشان هم گاهی به‌طور موقت از دسترس خارج می‌شوند یا خطای 502/503
-# می‌دهند (یک نقطه‌ی خرابی اضافه که ربطی به فیلترینگ ندارد)، در حالی‌که در تجربه‌ی اخیر
-# شما سرور به‌طور مستقیم و بدون مشکل به Docker Hub وصل شده. اگر در آینده دوباره خطای شبکه
-# از نوع «connection reset» موقع pull از Docker Hub دیدید (نه خطای 502 یک آینه)، یکی از
-# آینه‌های زیر را امتحان کنید:
-#   python:3.12-slim-bookworm                                (پیش‌فرض فعلی — رسمی Docker Hub)
-#   docker.arvancloud.ir/library/python:3.12-slim-bookworm   (آینه جایگزین)
-#   docker.iranserver.com/library/python:3.12-slim-bookworm  (آینه جایگزین)
-#   docker.ththt.ir/library/python:3.12-slim-bookworm        (آینه جایگزین — الان قطع بود)
-ARG BASE_IMAGE=python:3.12-slim-bookworm
+# ============================================================
+#  تصویر پایه — استفاده از آینه داخلی ایران (جلوگیری از 403 Docker Hub)
+# ============================================================
+# گزینه‌های جایگزین (در صورت عدم دسترسی می‌توانید به صورت دستی تعویض کنید):
+#   python:3.12-slim-bookworm                                (Docker Hub رسمی — در ایران 403 می‌دهد)
+#   docker.abrha.net/library/python:3.12-slim-bookworm       (آینه پارس‌پک — پیش‌فرض فعلی)
+#   docker-mirror.liara.ir/library/python:3.12-slim-bookworm (آینه Liara)
+#   docker.arvancloud.ir/library/python:3.12-slim-bookworm   (آینه ابرآروان)
+ARG BASE_IMAGE=docker.abrha.net/library/python:3.12-slim-bookworm
 
 # ============================================================
-#  مرحله ۱: نصب وابستگی‌ها در یک ایمیج موقت (build-time only)
+#  مرحله ۱: نصب وابستگی‌ها در تصویر موقت (فقط زمان ساخت)
 # ============================================================
 FROM ${BASE_IMAGE} AS builder
 
-# به‌روزرسانی امنیتی پکیج‌های پایه + نصب فقط چیزی که برای build لازم است
+# به‌روزرسانی امنیتی بسته‌های پایه
 RUN apt-get update \
     && apt-get upgrade -y \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
 
-# فقط requirements کپی می‌شود تا کش داکر درست کار کند و تغییر کد باعث نصب مجدد نشود
+# فقط requirements را کپی کنید تا کش Docker به درستی کار کند
 COPY requirements.txt .
 
-# نصب در یک virtualenv مجزا (نه --user): مسیر site-packages در venv همیشه از طریق
-# pyvenv.cfg مشخص و خودکار است و به حدس‌زدن نسخه دقیق پایتون/مسیر site-packages
-# (که قبلا همین‌جا باعث ModuleNotFoundError می‌شد) وابسته نیست — فارغ از اینکه ایمیج
-# پایه را از Docker Hub بگیرید یا از یک آینه.
+# استفاده از virtualenv مستقل: مسیر site-packages همیشه از طریق pyvenv.cfg مشخص می‌شود
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# نکته امنیتی: برای سخت‌گیری بیشتر می‌توانید requirements.txt را با pip-compile --generate-hashes
-# بازسازی کنید و این دستور را به «pip install --require-hashes» تغییر دهید.
+# نصب وابستگی‌ها (در نهایت pip/setuptools/wheel حذف می‌شوند)
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt \
     && pip uninstall -y pip setuptools wheel
 
 # ============================================================
-#  مرحله ۲: ایمیج نهایی — حداقلی، بدون ابزار build، بدون root
+#  مرحله ۲: تصویر نهایی — حداقلی، بدون ابزار ساخت، بدون root
 # ============================================================
 FROM ${BASE_IMAGE} AS runtime
 
 LABEL org.opencontainers.image.title="RLFW_BaleBot" \
-      org.opencontainers.image.description="ربات لیگ کتابخوانی برای پیام‌رسان بله" \
+      org.opencontainers.image.description="ربات لیگ کتاب‌خوانی برای پیام‌رسان بله" \
       org.opencontainers.image.licenses="MIT"
 
-# به‌روزرسانی امنیتی پکیج‌های سیستمی + حذف هرچه ممکن است سطح حمله را افزایش دهد
+# به‌روزرسانی امنیتی + نصب ca-certificates + حذف فایل‌های اضافی
 RUN apt-get update \
     && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/* /var/cache/apt/* \
-    && find / -xdev \( -name '*.pyc' -o -name '__pycache__' \) -exec rm -rf {} + 2>/dev/null || true
+    && find / -xdev -type d -name '__pycache__' -prune -exec rm -rf {} + \
+    && find / -xdev -type f -name '*.pyc' -delete \
+    && true
 
-# کاربر و گروه غیر-روت با UID/GID ثابت (برای هماهنگی مالکیت volume روی هاست)
+# کاربر و گروه غیر root با UID/GID ثابت
 RUN groupadd --gid 10001 appuser \
     && useradd --uid 10001 --gid appuser --home-dir /app --shell /usr/sbin/nologin --no-create-home appuser
 
 WORKDIR /app
 
-# انتقال کل virtualenv ساخته‌شده در مرحله builder (شامل پایتون و پکیج‌های نصب‌شده)
+# انتقال virtualenv کامل از مرحله builder
 COPY --from=builder /opt/venv /opt/venv
 
 ENV PATH="/opt/venv/bin:$PATH" \
@@ -78,11 +66,11 @@ ENV PATH="/opt/venv/bin:$PATH" \
     LOG_PATH=/app/data/bot.log \
     HEARTBEAT_PATH=/app/data/heartbeat
 
-# فقط کد لازم کپی می‌شود (تست‌ها، .git، .env و ... با .dockerignore حذف شده‌اند)
+# فقط کد لازم را کپی کنید
 COPY --chown=appuser:appuser app ./app
 COPY --chown=appuser:appuser run.py ./
 
-# پوشه داده با مالکیت کاربر غیر-روت از قبل ساخته می‌شود (چون فایل‌سیستم runtime read-only خواهد بود)
+# پوشه داده با مالکیت کاربر غیر root
 RUN mkdir -p /app/data && chown -R appuser:appuser /app/data
 
 USER appuser:appuser
