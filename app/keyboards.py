@@ -10,11 +10,13 @@ BTN_BOOKS = "📚 کتاب‌های ویژه این فصل"
 BTN_RULES = "📜 قوانین لیگ"
 BTN_PROFILE = "👤 مشخصات من"
 BTN_HELP = "❓ راهنما"
+BTN_REMIND = "⏰ یادآور مطالعه"
+BTN_POLLS = "🗳 نظرسنجی‌ها"
 BTN_ADMIN = "⚙️ پنل مدیریت"
 
 ALL_BUTTONS = {
     BTN_LOG, BTN_EDIT, BTN_REPORT, BTN_STATUS, BTN_BOOKS,
-    BTN_RULES, BTN_PROFILE, BTN_HELP, BTN_ADMIN,
+    BTN_RULES, BTN_PROFILE, BTN_HELP, BTN_ADMIN, BTN_REMIND, BTN_POLLS,
 }
 
 
@@ -23,7 +25,8 @@ def main_menu(is_admin: bool = False) -> dict:
         [{"text": BTN_LOG}, {"text": BTN_EDIT}],
         [{"text": BTN_REPORT}, {"text": BTN_STATUS}],
         [{"text": BTN_BOOKS}, {"text": BTN_RULES}],
-        [{"text": BTN_PROFILE}, {"text": BTN_HELP}],
+        [{"text": BTN_PROFILE}, {"text": BTN_REMIND}],
+        [{"text": BTN_POLLS}, {"text": BTN_HELP}],
     ]
     if is_admin:
         rows.append([{"text": BTN_ADMIN}])

@@ -126,3 +126,44 @@ def parse_date(text: str):
         return dt.date(gy, gm, gd).isoformat()
     except ValueError:
         return None
+
+
+def add_hours_iso(hours: float) -> str:
+    """زمان (به وقت تهران) چند ساعت بعد، به‌صورت ISO بدون منطقه‌ی زمانی."""
+    t = now_tehran() + dt.timedelta(hours=hours)
+    return t.replace(tzinfo=None).isoformat(timespec="seconds")
+
+
+def parse_datetime(text: str):
+    """
+    «1405/09/10 18:30» (تاریخ شمسی + ساعت) → '2026-12-01T18:30:00' (وقت تهران)؛ نامعتبر → None.
+    ساعت می‌تواند با «:» یا «.» نوشته شود؛ اگر ساعت نیامد، ۰۰:۰۰ در نظر گرفته می‌شود.
+    """
+    t = normalize_digits(text or "").strip()
+    parts = t.split()
+    if not parts or len(parts) > 2:
+        return None
+    date_iso = parse_date(parts[0])
+    if not date_iso:
+        return None
+    hh, mm = 0, 0
+    if len(parts) == 2:
+        m = re.fullmatch(r"(\d{1,2})[:.](\d{2})", parts[1])
+        if not m:
+            return None
+        hh, mm = int(m.group(1)), int(m.group(2))
+        if hh > 23 or mm > 59:
+            return None
+    return f"{date_iso}T{hh:02d}:{mm:02d}:00"
+
+
+def parse_hhmm(text: str):
+    """'18:30' یا '۱۸.۳۰' یا '7' → '18:30' / '07:00'؛ نامعتبر → None."""
+    t = normalize_digits(text or "").strip()
+    m = re.fullmatch(r"(\d{1,2})(?:[:.](\d{2}))?", t)
+    if not m:
+        return None
+    hh, mm = int(m.group(1)), int(m.group(2) or 0)
+    if hh > 23 or mm > 59:
+        return None
+    return f"{hh:02d}:{mm:02d}"

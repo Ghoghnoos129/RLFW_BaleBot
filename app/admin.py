@@ -6,7 +6,7 @@ import json
 import logging
 import os
 
-from app import auth, backup, bale_api, db, jdate, league, texts, utils
+from app import auth, backup, bale_api, content, db, jdate, league, polls, texts, utils
 from app.bale_api import answer_callback_query, edit_or_send, send_long, send_message
 from app.config import ADMIN_IDS
 from app.keyboards import cancel_kb, confirm_keyboard, inline
@@ -59,6 +59,7 @@ def show_panel(chat_id, message_id=None, user_id=None):
     rows = [
         [("📏 قوانین و فرمول‌ها", "adm:rules"), ("🗓 فصل‌ها", "adm:seasons")],
         [("📚 کتاب‌های ویژه", "adm:books:0"), ("📊 گزارش فصل جاری", "adm:report:0")],
+        [("📢 پیام به کاربران", "adm:bc:home"), ("🗳 نظرسنجی‌ها", "adm:pl:home")],
         [("👥 کاربران", "adm:users:0"), ("🛡 مدیرها", "adm:admins")],
         [("🔑 رمز ثبت‌نام", "adm:pw")],
     ]
@@ -498,7 +499,7 @@ def _wipe_warning_screen(chat_id, message_id):
         chat_id, message_id,
         "🚨 هشدار: حذف داده‌ها\n\n"
         "این کار غیرقابل برگشت است. یکی از دو سطح را انتخاب کنید:\n\n"
-        "۱) حذف لیگ‌ها و تاریخچه — همه‌ی فصل‌ها، کتاب‌های ویژه، مطالعه‌ها، امتیازها و نتایج و برندگان پاک می‌شود. "
+        "۱) حذف لیگ‌ها و تاریخچه — همه‌ی فصل‌ها، کتاب‌های ویژه، مطالعه‌ها، امتیازها، نتایج و برندگان، نظرسنجی‌ها و تاریخچه‌ی پیام‌ها پاک می‌شود. "
         "کاربران، مدیرها و تنظیمات (قوانین، رمز ثبت‌نام) می‌مانند.\n\n"
         "۲) حذف کامل — علاوه بر موارد بالا، همه‌ی کاربران ثبت‌نام‌شده هم حذف می‌شوند "
         "(باید دوباره با رمز ثبت‌نام کنند). مدیرها و تنظیمات می‌مانند.\n\n"
@@ -538,8 +539,11 @@ def _pw_screen(chat_id, message_id=None):
                 "کاربران جدید فقط با این رمز می‌توانند ثبت‌نام کنند. رمز را فقط به شرکت‌کنندگان بدهید.")
     else:
         text = "🔑 رمز ثبت‌نام تعیین نشده است؛ ثبت‌نام کاربران جدید فعلاً بسته است."
+    text += ("\n\nℹ️ مدیرها و کاربرانِ قبلاً ثبت‌نام‌شده رمز نمی‌خواهند. برای آزمایش از حساب دیگری "
+             "که عضو/مدیر نیست استفاده کنید، یا از «آزمایش رمز». رمز به بزرگی/کوچکی حروف و ارقام فارسی/انگلیسی حساس نیست.")
     edit_or_send(chat_id, message_id, text, inline([
         [("🔑 تعیین / تغییر رمز", "adm:pwset")],
+        [("🧪 آزمایش رمز", "adm:pwtest")],
         [("🚫 بستن ثبت‌نام (حذف رمز)", "adm:pwclear")],
         BACK_HOME,
     ]))
@@ -721,6 +725,25 @@ def handle_command(chat_id, user_id, text) -> bool:
 def handle_flow(chat_id, user_id, state, data, text) -> bool:
     text = text.strip()
 
+    if state.startswith("admin_bc_"):
+        return content.handle_flow(chat_id, user_id, state, data, text)
+    if state.startswith("admin_pl_"):
+        return polls.handle_flow(chat_id, user_id, state, data, text)
+
+    if state == "admin_test_pw":
+        db.clear_user_flow(user_id)
+        pw = db.get_registration_password()
+        if not pw:
+            send_message(chat_id, "رمز ثبت‌نام تعیین نشده است.", inline([BACK_HOME]))
+        elif utils.normalize_secret(text) == utils.normalize_secret(pw):
+            send_message(chat_id, f"✅ مطابقت دارد. (طول متن دریافتی: {len(text)} حرف؛ طول رمز ذخیره‌شده: {len(pw)} حرف)\n"
+                                  "ثبت‌نام با این رمز باید جواب بدهد؛ توجه: مدیرها و کاربران ثبت‌نام‌شده رمز نمی‌خواهند.",
+                         inline([BACK_HOME]))
+        else:
+            send_message(chat_id, f"❌ مطابقت ندارد. (طول متن دریافتی: {len(text)} حرف؛ طول رمز ذخیره‌شده: {len(pw)} حرف)\n"
+                                  "رمز فعلی را از «🔑 رمز ثبت‌نام» ببینید.", inline([BACK_HOME]))
+        return True
+
     if state == "admin_new_season_name":
         if not text or len(text) > 60:
             _ask(chat_id, "نام فصل باید متنی کوتاه (حداکثر ۶۰ حرف) باشد. دوباره ارسال کنید:")
@@ -874,6 +897,13 @@ def handle_callback(cb: dict):
 
     parts = data.split(":")
     action = parts[1] if len(parts) > 1 else ""
+
+    if action == "bc":
+        content.admin_callback(chat_id, message_id, user_id, parts[2:])
+        return
+    if action == "pl":
+        polls.admin_callback(chat_id, message_id, user_id, parts[2:])
+        return
 
     if action == "home":
         show_panel(chat_id, message_id, user_id)
@@ -1136,6 +1166,10 @@ def handle_callback(cb: dict):
     elif action == "pwset":
         db.set_user_flow(user_id, "admin_set_pw")
         _ask(chat_id, "رمز ثبت‌نام جدید را ارسال کنید (۴ تا ۴۰ حرف):\n(برای انصراف: «❌ انصراف»)")
+
+    elif action == "pwtest":
+        db.set_user_flow(user_id, "admin_test_pw")
+        _ask(chat_id, "رمزی را که کاربران تایپ می‌کنند همین‌جا بنویسید تا بگویم با رمز ثبت‌نام مطابقت دارد یا نه:")
 
     elif action == "pwclear":
         db.set_registration_password("")

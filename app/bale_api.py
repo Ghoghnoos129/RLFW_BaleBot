@@ -132,3 +132,26 @@ def download_file(file_path: str, dest: str, max_bytes: int = 50 * 1024 * 1024) 
     except (requests.RequestException, OSError) as e:
         log.warning("download_file failed: %s", e)
         return False
+
+
+_MEDIA_METHODS = {
+    "photo": ("sendPhoto", "photo"),
+    "video": ("sendVideo", "video"),
+    "audio": ("sendAudio", "audio"),
+    "voice": ("sendVoice", "voice"),
+    "document": ("sendDocument", "document"),
+}
+CAPTION_LIMIT = 1000
+
+
+def send_media(chat_id: int, kind: str, file_id: str, caption: str = None):
+    """ارسال عکس/ویدیو/صوت/ویس/فایل با file_id (فایلی که قبلاً به ربات ارسال شده). کپشن بلند جدا ارسال می‌شود."""
+    method, field = _MEDIA_METHODS[kind]
+    payload = {"chat_id": chat_id, field: file_id}
+    long_caption = bool(caption) and len(caption) > CAPTION_LIMIT
+    if caption and not long_caption:
+        payload["caption"] = caption
+    resp = _call(method, payload, timeout=60)
+    if long_caption and resp.get("ok"):
+        send_long(chat_id, caption)
+    return resp

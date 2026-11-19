@@ -111,6 +111,50 @@ def init_db():
                 key TEXT PRIMARY KEY,
                 value TEXT
             );
+
+            CREATE TABLE IF NOT EXISTS reminders (
+                user_id INTEGER PRIMARY KEY,
+                remind_time TEXT NOT NULL,        -- HH:MM به وقت تهران
+                enabled INTEGER NOT NULL DEFAULT 1,
+                last_sent_date TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS broadcasts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                kind TEXT NOT NULL,               -- text | photo | video | audio | voice | document
+                text TEXT,
+                file_id TEXT,
+                caption TEXT,
+                send_at TEXT,                     -- زمان‌بندی (وقت تهران)؛ خالی = همین حالا
+                status TEXT NOT NULL DEFAULT 'scheduled',  -- scheduled | sent | canceled
+                created_by INTEGER,
+                created_at TEXT,
+                sent_at TEXT,
+                sent_count INTEGER DEFAULT 0,
+                fail_count INTEGER DEFAULT 0
+            );
+
+            CREATE TABLE IF NOT EXISTS polls (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                question TEXT NOT NULL,
+                options TEXT NOT NULL,            -- JSON: لیست متن دکمه‌ها
+                per_row INTEGER NOT NULL DEFAULT 1,
+                public_results INTEGER NOT NULL DEFAULT 0,
+                status TEXT NOT NULL DEFAULT 'open',       -- open | closed
+                created_by INTEGER,
+                created_at TEXT,
+                closes_at TEXT,
+                closed_at TEXT,
+                sent_count INTEGER DEFAULT 0
+            );
+
+            CREATE TABLE IF NOT EXISTS poll_votes (
+                poll_id INTEGER NOT NULL REFERENCES polls(id),
+                user_id INTEGER NOT NULL,
+                option_idx INTEGER NOT NULL,
+                voted_at TEXT,
+                PRIMARY KEY (poll_id, user_id)
+            );
             """
         )
         # مهاجرت دیتابیس نسخه ۰.۱ به ۰.۲ (ستون‌های جدید؛ داده‌های قبلی دست‌نخورده می‌مانند)
@@ -279,7 +323,8 @@ def all_users():
 def delete_user(user_id: int):
     """کاربر را همراه با همه‌ی مطالعه‌ها، کتاب‌ها و نتایج ذخیره‌شده‌اش (در همه‌ی فصل‌ها) پاک می‌کند."""
     with get_conn() as conn:
-        for table in ("season_results", "book_completions", "reading_logs", "user_state"):
+        for table in ("season_results", "book_completions", "reading_logs", "user_state",
+                      "reminders", "poll_votes"):
             conn.execute(f"DELETE FROM {table} WHERE user_id=?", (user_id,))
         conn.execute("DELETE FROM users WHERE user_id=?", (user_id,))
 
@@ -294,12 +339,15 @@ def wipe_all(full: bool = False):
         for table in ("season_results", "book_completions", "reading_logs", "special_books", "seasons"):
             conn.execute(f"DELETE FROM {table}")
         conn.execute("DELETE FROM bot_state WHERE key LIKE 'end_reminded:%'")
+        for table in ("poll_votes", "polls", "broadcasts"):   # نظرسنجی‌ها و تاریخچه‌ی پیام‌ها هم تاریخچه‌اند
+            conn.execute(f"DELETE FROM {table}")
         if full:
+            conn.execute("DELETE FROM reminders")
             conn.execute("DELETE FROM users")
             conn.execute("DELETE FROM user_state")
             conn.execute("DELETE FROM bot_state WHERE key LIKE 'pwblock:%'")
         conn.execute("DELETE FROM sqlite_sequence WHERE name IN "
-                     "('seasons','special_books','reading_logs','book_completions','season_results')")
+                     "('seasons','special_books','reading_logs','book_completions','season_results','polls','broadcasts')")
 
 
 def count_users() -> int:
@@ -679,3 +727,170 @@ def set_result_prize(season_id: int, user_id: int, prize: int):
             "UPDATE season_results SET prize=? WHERE season_id=? AND user_id=?",
             (prize, season_id, user_id),
         )
+
+
+# ---------- reminders (یادآور مطالعه روزانه) ----------
+
+def get_reminder(user_id: int):
+    with get_conn() as conn:
+        return conn.execute("SELECT * FROM reminders WHERE user_id=?", (user_id,)).fetchone()
+
+
+def set_reminder(user_id: int, remind_time: str, enabled: bool = True):
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO reminders(user_id, remind_time, enabled) VALUES (?, ?, ?) "
+            "ON CONFLICT(user_id) DO UPDATE SET remind_time=excluded.remind_time, "
+            "enabled=excluded.enabled, last_sent_date=NULL",
+            (user_id, remind_time, 1 if enabled else 0),
+        )
+
+
+def disable_reminder(user_id: int):
+    with get_conn() as conn:
+        conn.execute("UPDATE reminders SET enabled=0 WHERE user_id=?", (user_id,))
+
+
+def due_reminders(today_iso: str, hhmm: str):
+    """یادآورهای فعالی که ساعتشان رسیده/گذشته و امروز هنوز فرستاده نشده."""
+    with get_conn() as conn:
+        return conn.execute(
+            "SELECT * FROM reminders WHERE enabled=1 AND remind_time<=? "
+            "AND COALESCE(last_sent_date,'')<>?",
+            (hhmm, today_iso),
+        ).fetchall()
+
+
+def mark_reminder_sent(user_id: int, today_iso: str):
+    with get_conn() as conn:
+        conn.execute("UPDATE reminders SET last_sent_date=? WHERE user_id=?", (today_iso, user_id))
+
+
+def count_reminders() -> int:
+    with get_conn() as conn:
+        return conn.execute("SELECT COUNT(*) AS c FROM reminders WHERE enabled=1").fetchone()["c"]
+
+
+# ---------- broadcasts (پیام‌های مدیر به کاربران) ----------
+
+def add_broadcast(kind, text, file_id, caption, send_at, status, created_by) -> int:
+    with get_conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO broadcasts(kind, text, file_id, caption, send_at, status, created_by, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (kind, text, file_id, caption, send_at, status, created_by, now()),
+        )
+        return cur.lastrowid
+
+
+def get_broadcast(bid: int):
+    with get_conn() as conn:
+        return conn.execute("SELECT * FROM broadcasts WHERE id=?", (bid,)).fetchone()
+
+
+def due_broadcasts(now_iso: str):
+    with get_conn() as conn:
+        return conn.execute(
+            "SELECT * FROM broadcasts WHERE status='scheduled' AND send_at IS NOT NULL AND send_at<=? ORDER BY send_at",
+            (now_iso,),
+        ).fetchall()
+
+
+def list_broadcasts(status=None, limit: int = 10):
+    with get_conn() as conn:
+        if status:
+            return conn.execute(
+                "SELECT * FROM broadcasts WHERE status=? ORDER BY id DESC LIMIT ?", (status, limit)
+            ).fetchall()
+        return conn.execute("SELECT * FROM broadcasts ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+
+
+def finish_broadcast(bid: int, status: str, sent: int = 0, failed: int = 0):
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE broadcasts SET status=?, sent_at=?, sent_count=?, fail_count=? WHERE id=?",
+            (status, now(), sent, failed, bid),
+        )
+
+
+# ---------- polls (نظرسنجی) ----------
+
+def create_poll(question, options_json, per_row, public_results, closes_at, created_by) -> int:
+    with get_conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO polls(question, options, per_row, public_results, status, created_by, created_at, closes_at) "
+            "VALUES (?, ?, ?, ?, 'open', ?, ?, ?)",
+            (question, options_json, per_row, 1 if public_results else 0, created_by, now(), closes_at),
+        )
+        return cur.lastrowid
+
+
+def get_poll(poll_id: int):
+    with get_conn() as conn:
+        return conn.execute("SELECT * FROM polls WHERE id=?", (poll_id,)).fetchone()
+
+
+def list_polls(limit: int = 10):
+    with get_conn() as conn:
+        return conn.execute("SELECT * FROM polls ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+
+
+def open_polls():
+    with get_conn() as conn:
+        return conn.execute("SELECT * FROM polls WHERE status='open' ORDER BY id").fetchall()
+
+
+def due_polls(now_iso: str):
+    with get_conn() as conn:
+        return conn.execute(
+            "SELECT * FROM polls WHERE status='open' AND closes_at IS NOT NULL AND closes_at<=?", (now_iso,)
+        ).fetchall()
+
+
+def close_poll_row(poll_id: int):
+    with get_conn() as conn:
+        conn.execute("UPDATE polls SET status='closed', closed_at=? WHERE id=? AND status='open'", (now(), poll_id))
+
+
+def set_poll_sent(poll_id: int, n: int):
+    with get_conn() as conn:
+        conn.execute("UPDATE polls SET sent_count=? WHERE id=?", (n, poll_id))
+
+
+def delete_poll(poll_id: int):
+    with get_conn() as conn:
+        conn.execute("DELETE FROM poll_votes WHERE poll_id=?", (poll_id,))
+        conn.execute("DELETE FROM polls WHERE id=?", (poll_id,))
+
+
+def get_vote(poll_id: int, user_id: int):
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT option_idx FROM poll_votes WHERE poll_id=? AND user_id=?", (poll_id, user_id)
+        ).fetchone()
+        return row["option_idx"] if row else None
+
+
+def cast_vote(poll_id: int, user_id: int, option_idx: int):
+    """رأی را ثبت/عوض می‌کند. رأی قبلی (یا None) را برمی‌گرداند."""
+    prev = get_vote(poll_id, user_id)
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO poll_votes(poll_id, user_id, option_idx, voted_at) VALUES (?, ?, ?, ?) "
+            "ON CONFLICT(poll_id, user_id) DO UPDATE SET option_idx=excluded.option_idx, voted_at=excluded.voted_at",
+            (poll_id, user_id, option_idx, now()),
+        )
+    return prev
+
+
+def vote_counts(poll_id: int) -> dict:
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT option_idx, COUNT(*) AS c FROM poll_votes WHERE poll_id=? GROUP BY option_idx", (poll_id,)
+        ).fetchall()
+        return {r["option_idx"]: r["c"] for r in rows}
+
+
+def voter_ids(poll_id: int) -> set:
+    with get_conn() as conn:
+        return {r["user_id"] for r in conn.execute("SELECT user_id FROM poll_votes WHERE poll_id=?", (poll_id,))}

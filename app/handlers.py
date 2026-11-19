@@ -8,7 +8,7 @@ import time
 
 import math
 
-from app import admin, auth, backup, db, jdate, keyboards, league, texts, utils
+from app import admin, auth, backup, content, db, jdate, keyboards, league, polls, reminders, texts, utils
 from app.bale_api import answer_callback_query, edit_message_text, edit_or_send, send_long, send_message
 from app.config import ADMIN_IDS, ADMIN_SETUP_CODE, MAX_MINUTES_PER_ENTRY
 from app.keyboards import cancel_kb, inline
@@ -17,6 +17,7 @@ log = logging.getLogger("handlers")
 
 # مرحله‌های ثبت‌نام (قابل رد‌شدن با دکمه‌های منو نیستند؛ فقط با /start یا «انصراف» تمام می‌شوند)
 REG_STATES = {"await_password", "await_name", "await_spouse", "await_children", "await_card"}
+MEDIA_KEYS = ("photo", "video", "audio", "voice", "document", "animation", "sticker", "video_note")
 CANCEL_WORDS = {"انصراف", "❌ انصراف", "/cancel", "/لغو"}
 LOG_PAGE_SIZE = 5
 MAX_PASSWORD_TRIES = 5
@@ -87,11 +88,13 @@ def _handle_registration(chat_id, user_id, state, data, text, username):
             db.clear_user_flow(user_id)
             send_message(chat_id, texts.REGISTRATION_CLOSED)
             return
-        given = utils.normalize_digits(text).strip().encode()
-        wanted = utils.normalize_digits(password).strip().encode()
+        # مقایسه‌ی تحمل‌پذیر: ارقام فارسی/انگلیسی، ی/ک عربی، نویسه‌های نامرئی، فاصله و بزرگی/کوچکی حروف
+        given = utils.normalize_secret(text).encode()
+        wanted = utils.normalize_secret(password).encode()
         if hmac.compare_digest(given, wanted):
             _begin_state(chat_id, user_id, "await_name")
             return
+        log.info("رمز ثبت‌نام اشتباه: user=%s طول_متن=%s", user_id, len(text))
         fails = int(data or 0) + 1
         if fails >= MAX_PASSWORD_TRIES:
             db.set_state(f"pwblock:{user_id}", str(time.time() + BLOCK_SECONDS))
@@ -227,9 +230,8 @@ def handle_message(message: dict):
 
     # ---------- فایل ارسالی (فقط برای بازیابی پشتیبان توسط مدیر اصلی) ----------
     doc = message.get("document")
-    if doc:
-        if state == "admin_restore_wait" and auth.is_super_admin(user_id):
-            admin.handle_restore_document(chat_id, user_id, doc)
+    if doc and state == "admin_restore_wait" and auth.is_super_admin(user_id):
+        admin.handle_restore_document(chat_id, user_id, doc)
         return
 
     # ---------- انصراف ----------
@@ -245,6 +247,15 @@ def handle_message(message: dict):
     if state and state not in REG_STATES and (text.startswith("/") or text in keyboards.ALL_BUTTONS):
         db.clear_user_flow(user_id)
         state, flow_data = None, ""
+
+    # ---------- پیام مدیر به کاربران: متن/عکس/ویدیو/صوت/فایل ----------
+    if is_admin and state in ("admin_bc_wait", "admin_bc_confirm"):
+        content.handle_input(chat_id, user_id, message)
+        return
+
+    # پیام رسانه‌ای بدون متن که در هیچ مرحله‌ای منتظرش نیستیم، نادیده گرفته می‌شود
+    if not text and any(message.get(k) for k in MEDIA_KEYS):
+        return
 
     # ---------- مدیر ----------
     if is_admin:
@@ -269,10 +280,16 @@ def handle_message(message: dict):
             if nxt:
                 _begin_state(chat_id, user_id, nxt, note=texts.PROFILE_INCOMPLETE_NOTE)
             else:
-                send_message(chat_id, texts.ALREADY_REGISTERED, reply_markup=_menu(user_id))
+                send_message(
+                    chat_id,
+                    texts.ALREADY_REGISTERED + ("\n\nℹ️ مدیرها و کاربرانِ ثبت‌نام‌شده رمز نمی‌خواهند. برای آزمایش رمز، با "
+                                                "حساب دیگری که مدیر/عضو نیست /start بزنید، یا از پنل مدیریت ← "
+                                                "رمز ثبت‌نام ← «آزمایش رمز» استفاده کنید." if is_admin else ""),
+                    reply_markup=_menu(user_id))
             return
         if is_admin:                                                # مدیر برای ثبت‌نام رمز لازم ندارد
-            _begin_state(chat_id, user_id, "await_name")
+            _begin_state(chat_id, user_id, "await_name",
+                         note="ℹ️ شما مدیر هستید و برای ثبت‌نام رمز لازم ندارید.\n\n")
             return
         if not db.get_registration_password():
             send_message(chat_id, texts.REGISTRATION_CLOSED)
@@ -346,6 +363,10 @@ def handle_message(message: dict):
         league.check_prize_increase(season["id"])
         return
 
+    if state == "edit_reminder":
+        reminders.handle_time_text(chat_id, user_id, text)
+        return
+
     if state in ("edit_name", "edit_spouse"):
         if not text or len(text) > 80:
             send_message(chat_id, texts.INVALID_TEXT, reply_markup=cancel_kb())
@@ -413,6 +434,14 @@ def handle_message(message: dict):
         _show_profile(chat_id, user_id)
         return
 
+    if text == keyboards.BTN_REMIND:
+        reminders.show(chat_id, user_id)
+        return
+
+    if text == keyboards.BTN_POLLS:
+        polls.show_open_polls(chat_id, user_id)
+        return
+
     if text in (keyboards.BTN_HELP, "/help", "/کمک"):
         msg = texts.HELP_USER
         if is_admin:
@@ -474,6 +503,28 @@ def handle_callback_query(cb: dict):
     user_row = db.get_user(user_id)
     if not user_row or user_row["has_children"] is None:
         answer_callback_query(cb_id, texts.NOT_REGISTERED, show_alert=True)
+        return
+
+    # ---------- نظرسنجی ----------
+    if data.startswith("poll:"):
+        polls.handle_vote(cb)
+        return
+    if data.startswith("pollres:"):
+        polls.handle_results_button(cb)
+        return
+
+    # ---------- یادآور ----------
+    if data == "rem:log":
+        answer_callback_query(cb_id)
+        if db.get_active_season():
+            db.set_user_flow(user_id, "await_minutes")
+            send_message(chat_id, texts.ASK_MINUTES, reply_markup=cancel_kb())
+        else:
+            send_message(chat_id, texts.no_active_text(db.get_upcoming_season()))
+        return
+    if data.startswith("rem:"):
+        answer_callback_query(cb_id)
+        reminders.handle_callback(cb)
         return
 
     # ---------- مشخصات ----------

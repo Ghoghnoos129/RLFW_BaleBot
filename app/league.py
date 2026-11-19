@@ -108,15 +108,17 @@ def recipient_ids() -> set:
     return ids
 
 
-def broadcast(text: str, ids=None) -> int:
-    """پیام را برای همه‌ی کاربران ثبت‌نام‌شده و مدیرها می‌فرستد. تعداد ارسال موفق را برمی‌گرداند."""
+def broadcast(text: str, ids=None, reply_markup=None) -> int:
+    """پیام را برای همه‌ی کاربران ثبت‌نام‌شده و مدیرها (یا ids) می‌فرستد. تعداد ارسال موفق را برمی‌گرداند."""
     ids = recipient_ids() if ids is None else ids
     sent = 0
     for uid in sorted(ids):
         try:
             ok = True
-            for chunk in split_text(text):
-                ok = bale_api.send_message(uid, chunk).get("ok", False) and ok
+            chunks = split_text(text)
+            for i, chunk in enumerate(chunks):
+                markup = reply_markup if i == len(chunks) - 1 else None
+                ok = bale_api.send_message(uid, chunk, reply_markup=markup).get("ok", False) and ok
             sent += 1 if ok else 0
         except Exception:
             log.warning("broadcast failed for %s", uid)

@@ -91,3 +91,18 @@ def parse_id_list(text: str, max_range: int = 500):
         else:
             bad.append(tok)
     return list(dict.fromkeys(ids)), bad
+
+
+_INVISIBLE = "\u200c\u200d\u200e\u200f\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069\ufeff\u00a0\u0640"
+
+
+def normalize_secret(s) -> str:
+    """
+    شکل یکسان‌شده‌ی رمز برای مقایسه: ارقام فارسی/عربی→انگلیسی، «ي ك ى» عربی→«ی ک ی» فارسی،
+    حذف نیم‌فاصله و نویسه‌های نامرئی و همه‌ی فاصله‌ها، و بی‌اعتنایی به بزرگی/کوچکی حروف
+    (کیبورد موبایل اغلب حرف اول را خودکار بزرگ می‌کند).
+    """
+    s = normalize_digits(s)
+    s = s.replace("ي", "ی").replace("ى", "ی").replace("ك", "ک")
+    s = "".join(ch for ch in s if ch not in _INVISIBLE)
+    return "".join(s.split()).casefold()

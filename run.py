@@ -9,7 +9,7 @@ import time
 
 from app import db
 from app.bale_api import get_updates, get_me
-from app import league
+from app import content, league, polls, reminders
 from app.config import LOG_PATH, HEARTBEAT_PATH, VERSION
 from app.handlers import handle_message, handle_callback_query
 
@@ -50,10 +50,12 @@ def process_update(update: dict):
 
 def run_scheduled_tasks():
     """شروع/پایان خودکار فصل‌ها بر اساس تاریخ شروع و پایان (هر دور از حلقه‌ی اصلی)."""
-    try:
-        league.tick()
-    except Exception:
-        log.exception("خطا در کارهای زمان‌بندی‌شده‌ی فصل")
+    for name, task in (("فصل", league.tick), ("پیام‌های زمان‌بندی‌شده", content.run_due),
+                       ("نظرسنجی", polls.close_due), ("یادآور", reminders.run_due)):
+        try:
+            task()
+        except Exception:
+            log.exception("خطا در کار زمان‌بندی‌شده: %s", name)
 
 
 def main():
