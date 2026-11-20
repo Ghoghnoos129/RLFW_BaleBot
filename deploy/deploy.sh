@@ -37,8 +37,46 @@ cd "$REPO_DIR"
 # --- اتصال امن به گیت‌هاب: فقط با کلید deploy مخصوص این سرور، با بررسی دقیق هاست ---
 export GIT_SSH_COMMAND="ssh -i $SSH_KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$KNOWN_HOSTS"
 
+# --- دریافت کد: اول مسیر اصلی (SSH روی پورت ۲۲)، اگر نشد SSH روی پورت ۴۴۳ گیت‌هاب،
+#     و در آخر (اختیاری) یک آینه‌ی گیت: GIT_MIRROR_URL در فایل $REPO_DIR/.deploy/mirror.env
+#     (مثلاً ریپوی آینه روی GitLab/Gitea/Codeberg). مثال محتوای فایل:
+#         GIT_MIRROR_URL=ssh://git@gitlab.com/USER/RLFW_BaleBot.git
+#         GIT_MIRROR_SSH_KEY=/opt/RLFW_BaleBot/.deploy/mirror_ed25519   (اختیاری)
+[ -f "$REPO_DIR/.deploy/mirror.env" ] && . "$REPO_DIR/.deploy/mirror.env"
 echo "-- git fetch --"
-git fetch --prune origin "$BRANCH"
+ORIGIN_URL="$(git remote get-url origin)"
+fetched=0
+
+try_fetch() {   # $1=آدرس ریموت   $2=توضیح
+    echo "   تلاش: $2"
+    if timeout 90 git fetch --prune "$1" "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"; then
+        fetched=1; return 0
+    fi
+    echo "   ناموفق: $2"; return 1
+}
+
+try_fetch "$ORIGIN_URL" "سرور اصلی (origin)" || true
+
+if [ "$fetched" -eq 0 ]; then
+    # تبدیل git@github.com:owner/repo.git  →  ssh://git@ssh.github.com:443/owner/repo.git
+    ALT_URL="$(printf '%s' "$ORIGIN_URL" | sed -E 's#^git@github\.com:#ssh://git@ssh.github.com:443/#; s#^ssh://git@github\.com/#ssh://git@ssh.github.com:443/#')"
+    if [ "$ALT_URL" != "$ORIGIN_URL" ]; then
+        try_fetch "$ALT_URL" "گیت‌هاب از طریق پورت ۴۴۳" || true
+    fi
+fi
+
+if [ "$fetched" -eq 0 ] && [ -n "${GIT_MIRROR_URL:-}" ]; then
+    # آینه معمولاً با کلید/توکن دیگری است؛ اگر لازم است GIT_MIRROR_SSH_KEY را هم بگذارید
+    if [ -n "${GIT_MIRROR_SSH_KEY:-}" ]; then
+        export GIT_SSH_COMMAND="ssh -i $GIT_MIRROR_SSH_KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+    fi
+    try_fetch "$GIT_MIRROR_URL" "آینه‌ی گیت (GIT_MIRROR_URL)" || true
+fi
+
+if [ "$fetched" -eq 0 ]; then
+    echo "خطا: دریافت کد از هیچ‌کدام از منبع‌ها ممکن نبود."
+    exit 1
+fi
 
 BEFORE_COMMIT="$(git rev-parse HEAD)"
 AFTER_COMMIT="$(git rev-parse "origin/$BRANCH")"
@@ -56,11 +94,8 @@ if git show "origin/$BRANCH" --stat | grep -q '^\.env$'; then
     echo "هشدار: فایل .env داخل ریپو دیده شد! این فایل هرگز نباید commit شود."
 fi
 
-echo "-- docker compose build --"
-docker compose build --pull
-
-echo "-- docker compose up -d --"
-docker compose up -d --remove-orphans
+echo "-- build (با فال‌بک آینه برای ایمیج پایه / pip / apt) و up --"
+"$REPO_DIR/deploy/build_with_fallback.sh" up
 
 echo "-- پاکسازی ایمیج‌های بلااستفاده --"
 docker image prune -f > /dev/null

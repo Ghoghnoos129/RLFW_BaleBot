@@ -1,6 +1,6 @@
 # RLFW_BaleBot — ربات لیگ کتابخوانی (پیام‌رسان بله)
 
-> **نسخه فعلی: ۱.۰** — این فایل وضعیت و نحوه‌ی کار با همین نسخه را توضیح می‌دهد.
+> **نسخه فعلی: ۱.۰.۱** — این فایل وضعیت و نحوه‌ی کار با همین نسخه را توضیح می‌دهد.
 > تغییراتِ هر نسخه نسبت به نسخه قبل در **[`CHANGELOG.md`](CHANGELOG.md)** آمده است.
 
 ربات مدیریت کامل «لیگ کتابخوانی» طبق طرح: ثبت‌نام با رمز، ثبت و اصلاح دقایق مطالعه،
@@ -199,6 +199,23 @@ ADMIN_SETUP_CODE=یک-رمز-دلخواه
 - **قرعه‌کشی وزن‌دار:** هر کد یک بلیط؛ هر نفر حداکثر یک‌بار برنده می‌شود
 - **رتبه‌بندی:** بر اساس تعداد کد؛ در تساوی، مطالعه‌ی بیشتر (دقیقه) جلوتر است
 - **زمان‌ها** همه به وقت تهران (UTC+03:30) ثبت و نمایش داده می‌شوند و تاریخ‌ها شمسی‌اند
+
+## 🔁 دیپلوی با فال‌بک «سرور اصلی ← آینه»
+
+منطق همه‌جا یکی است: **اول منبع اصلی، فقط اگر خطا داد به ترتیب آینه‌ها.**
+
+| بخش | منبع اصلی | آینه‌ها (به ترتیب) | کجا انجام می‌شود |
+|---|---|---|---|
+| ایمیج پایه | Docker Hub (`python:3.12-slim-bookworm`) | `mirror.gcr.io` ← `public.ecr.aws/docker` ← `docker.arvancloud.ir` ← `docker.iranserver.com` ← `docker.ththt.ir` | `deploy/build_with_fallback.sh` |
+| پکیج‌های پایتون | `pypi.org` | `mirror-pypi.runflare.com` ← `pypi.tuna.tsinghua.edu.cn` ← `mirrors.aliyun.com/pypi` ← `pypi.mirrors.ustc.edu.cn` | داخل `Dockerfile` (`PIP_MIRRORS`) |
+| پکیج‌های سیستمی (apt) | `deb.debian.org` | `mirror.arvancloud.ir` ← `ftp.de.debian.org` ← `mirrors.kernel.org` ← `ftp.us.debian.org` | داخل `Dockerfile` (`APT_MIRRORS`) |
+| دریافت کد | گیت‌هاب (SSH پورت ۲۲) | گیت‌هاب روی پورت ۴۴۳ (`ssh.github.com`) ← آینه‌ی گیت شما (`GIT_MIRROR_URL`) | `deploy/deploy.sh` |
+
+- ساخت دستی با فال‌بک: `./deploy/build_with_fallback.sh up`
+- لیست آینه‌ها را می‌توان عوض کرد: `BASE_IMAGE_CANDIDATES` (اسکریپت)، `PIP_MIRRORS` و `APT_MIRRORS` (در `.env` یا Build Variable).
+- ⚠️ آدرس‌های آینه را نمی‌توان از بیرون تضمین کرد (آینه‌ها گاهی قطع می‌شوند)؛ اگر یکی کار نکرد از لیست حذف یا جایگزین کنید.
+- **Coolify:** فقط `Dockerfile`/`docker-compose.yml` را اجرا می‌کند؛ پس pip و apt فال‌بک دارند ولی ایمیج پایه فقط یک مقدار است (Build Variable به نام `BASE_IMAGE`). برای فال‌بک خودکار ایمیج پایه روی سرور در `/etc/docker/daemon.json` بنویسید: `{"registry-mirrors": ["https://docker.arvancloud.ir"]}` و `systemctl restart docker` (توجه: این حالت اول آینه و بعد Docker Hub را امتحان می‌کند).
+- آینه‌ی گیت (اختیاری): فایل `/opt/RLFW_BaleBot/.deploy/mirror.env` با `GIT_MIRROR_URL=...` (و در صورت نیاز `GIT_MIRROR_SSH_KEY=...`).
 
 ## ۶. داده و پشتیبان‌گیری
 

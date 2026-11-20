@@ -6,13 +6,13 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        # نکته مهم: وقتی با «docker compose build» ساخته می‌شود (دقیقاً کاری که Coolify
-        # انجام می‌دهد)، همین مقدار پیش‌فرض اینجا به Dockerfile پاس داده می‌شود و پیش‌فرض
-        # داخل خودِ Dockerfile را override می‌کند — پس این دو باید همیشه با هم هماهنگ
-        # بمانند. اگر می‌خواهید آینه دیگری استفاده شود، مقدار BASE_IMAGE را در .env (یا
-        # Build Variable در Coolify) تنظیم کنید؛ جزئیات و لیست آینه‌های جایگزین در
-        # .env.example.
+        # ایمیج پایه: پیش‌فرض Docker Hub (سرور اصلی). اگر با deploy/build_with_fallback.sh
+        # بسازید، اولین ایمیجِ در دسترس از لیست آینه‌ها خودکار اینجا قرار می‌گیرد.
+        # (در Coolify فقط همین یک مقدار را می‌توان با Build Variable عوض کرد.)
         BASE_IMAGE: ${BASE_IMAGE:-python:3.12-slim-bookworm}
+        # آینه‌های pip و apt (جداشده با فاصله) — فقط وقتی منبع اصلی جواب ندهد استفاده می‌شوند.
+        PIP_MIRRORS: ${PIP_MIRRORS:-https://mirror-pypi.runflare.com/simple https://pypi.tuna.tsinghua.edu.cn/simple https://mirrors.aliyun.com/pypi/simple https://pypi.mirrors.ustc.edu.cn/simple}
+        APT_MIRRORS: ${APT_MIRRORS:-http://mirror.arvancloud.ir/debian http://ftp.de.debian.org/debian http://mirrors.kernel.org/debian http://ftp.us.debian.org/debian}
     # نام ایمیج داکر باید حتما lowercase باشد (محدودیت رجیستری داکر)؛ نام نمایشی/کانتینر
     # همچنان RLFW_BaleBot است.
     image: rlfw_balebot:latest
