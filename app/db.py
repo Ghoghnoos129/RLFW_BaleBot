@@ -165,6 +165,33 @@ def init_db():
         _ensure_column(conn, "seasons", "end_date", "TEXT")
         _ensure_column(conn, "seasons", "announced_prize", "INTEGER")
         _ensure_column(conn, "admins", "can_wipe", "INTEGER NOT NULL DEFAULT 0")
+        _migrate_rules_to_codes(conn)
+
+
+def _migrate_rules_to_codes(conn):
+    """
+    نسخه ۱.۰: «امتیاز» حذف شد. اگر مدیر در نسخه‌های قبل اعداد قوانین را عوض کرده بود، به معادل «کد» تبدیل
+    می‌شود (دقیقه‌ی هر کد = دقیقه‌ی هر امتیاز × امتیاز هر کد؛ سقف کد = سقف امتیاز ÷ امتیاز هر کد).
+    فقط یک‌بار اجرا می‌شود؛ اگر چیزی سفارشی نشده بود، پیش‌فرض‌های جدید (که با پیش‌فرض‌های قبلی معادل‌اند) می‌مانند.
+    """
+    def get(key):
+        row = conn.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
+        return int(row["value"]) if row and str(row["value"]).lstrip("-").isdigit() else None
+
+    def put(key, value):
+        conn.execute("INSERT OR IGNORE INTO settings(key, value) VALUES (?, ?)", (key, str(int(value))))
+
+    if conn.execute("SELECT 1 FROM settings WHERE key='rules_v1_migrated'").fetchone():
+        return
+    ppc, mpp_c, mpp_n, mx = (get("rule:points_per_code"), get("rule:minutes_per_point_child"),
+                             get("rule:minutes_per_point_nochild"), get("rule:max_points"))
+    if ppc is not None or mpp_c is not None:
+        put("rule:minutes_per_code_child", (mpp_c or 20) * (ppc or 5))
+    if ppc is not None or mpp_n is not None:
+        put("rule:minutes_per_code_nochild", (mpp_n or 25) * (ppc or 5))
+    if ppc is not None or mx is not None:
+        put("rule:max_codes", max(1, (mx or 150) // (ppc or 5)))
+    conn.execute("INSERT OR IGNORE INTO settings(key, value) VALUES ('rules_v1_migrated', '1')")
 
 
 def _ensure_column(conn, table: str, column: str, ddl: str):
@@ -529,23 +556,15 @@ def end_season(season_id: int):
 
 # ---------- special books ----------
 
-def add_books(season_id: int, items) -> int:
-    """items: لیستی از (عنوان, امتیاز)؛ همه در یک تراکنش اضافه می‌شوند. تعداد افزوده‌شده را برمی‌گرداند."""
+def add_books(season_id: int, titles) -> int:
+    """titles: لیستی از عنوان کتاب‌ها؛ همه در یک تراکنش اضافه می‌شوند. تعداد افزوده‌شده را برمی‌گرداند.
+    (ستون points از نسخه ۱.۰ استفاده نمی‌شود و ۰ ذخیره می‌شود؛ هر کتاب کد ثابت دارد.)"""
     with get_conn() as conn:
         conn.executemany(
-            "INSERT INTO special_books(season_id, title, points) VALUES (?, ?, ?)",
-            [(season_id, t, p) for t, p in items],
+            "INSERT INTO special_books(season_id, title, points) VALUES (?, ?, 0)",
+            [(season_id, t) for t in titles],
         )
-        return len(items)
-
-
-def add_book(season_id: int, title: str, points: int) -> int:
-    with get_conn() as conn:
-        cur = conn.execute(
-            "INSERT INTO special_books(season_id, title, points) VALUES (?, ?, ?)",
-            (season_id, title, points),
-        )
-        return cur.lastrowid
+        return len(titles)
 
 
 def list_books(season_id: int):
@@ -655,18 +674,12 @@ def completed_books(user_id: int, season_id: int):
         ).fetchall()
 
 
-def book_points_sum(user_id: int, season_id: int) -> int:
+def completed_books_count(user_id: int, season_id: int) -> int:
     with get_conn() as conn:
-        row = conn.execute(
-            """
-            SELECT COALESCE(SUM(sb.points),0) AS s
-            FROM book_completions bc
-            JOIN special_books sb ON sb.id = bc.book_id
-            WHERE bc.user_id=? AND bc.season_id=?
-            """,
+        return conn.execute(
+            "SELECT COUNT(*) AS c FROM book_completions WHERE user_id=? AND season_id=?",
             (user_id, season_id),
-        ).fetchone()
-        return row["s"] or 0
+        ).fetchone()["c"]
 
 
 # ---------- leaderboard / season results ----------
@@ -706,7 +719,7 @@ def season_results(season_id: int):
             FROM season_results sr
             LEFT JOIN users u ON u.user_id = sr.user_id
             WHERE sr.season_id=?
-            ORDER BY CASE WHEN sr.rank > 0 THEN 0 ELSE 1 END, sr.rank, sr.points DESC
+            ORDER BY CASE WHEN sr.rank > 0 THEN 0 ELSE 1 END, sr.rank, sr.codes DESC, sr.minutes DESC
             """,
             (season_id,),
         ).fetchall()

@@ -15,27 +15,27 @@ log = logging.getLogger("league")
 # ============================================================
 
 def compute_standings(season_id: int, rules: dict = None) -> list:
-    """لیست شرکت‌کنندگان فصل، مرتب بر اساس امتیاز (و در تساوی: دقیقه مطالعه بیشتر)."""
+    """لیست شرکت‌کنندگان فصل، مرتب بر اساس تعداد کد (و در تساوی: دقیقه مطالعه بیشتر)."""
     rules = rules or db.get_rules()
     rows = []
     for p in db.season_participants(season_id):
         minutes = db.total_minutes(p["user_id"], season_id)
-        book_pts = db.book_points_sum(p["user_id"], season_id)
+        books = db.completed_books_count(p["user_id"], season_id)
         has_children = bool(p["has_children"])
-        raw = scoring.raw_points(minutes, has_children, book_pts, rules)
-        points = min(raw, rules["max_points"])
+        from_minutes, from_books, codes, capped = scoring.total_codes(minutes, has_children, books, rules)
         rows.append({
             "user_id": p["user_id"],
             "full_name": p["full_name"] or str(p["user_id"]),
             "spouse_name": p["spouse_name"],
             "has_children": has_children,
             "minutes": minutes,
-            "book_points": book_pts,
-            "points": points,
-            "codes": scoring.codes_from_points(points, rules),
-            "capped": raw >= rules["max_points"],
+            "books": books,
+            "codes_minutes": from_minutes,
+            "codes_books": from_books,
+            "codes": codes,
+            "capped": capped,
         })
-    rows.sort(key=lambda r: (-r["points"], -r["minutes"], r["user_id"]))
+    rows.sort(key=lambda r: (-r["codes"], -r["minutes"], r["user_id"]))
     for i, r in enumerate(rows, start=1):
         r["rank"] = i
     return rows
@@ -60,11 +60,8 @@ def build_report(user_row, season_row) -> str:
     has_children = bool(user_row["has_children"])
 
     minutes = db.total_minutes(user_id, season_id)
-    book_pts = db.book_points_sum(user_id, season_id)
     books = db.completed_books(user_id, season_id)
-
-    raw = scoring.raw_points(minutes, has_children, book_pts, rules)
-    points = min(raw, rules["max_points"])
+    from_minutes, from_books, codes, capped = scoring.total_codes(minutes, has_children, len(books), rules)
     standings = compute_standings(season_id, rules)
     me = next((r for r in standings if r["user_id"] == user_id), None)
 
@@ -75,14 +72,15 @@ def build_report(user_row, season_row) -> str:
         season_name=season_row["name"],
         minutes=minutes,
         completed_books=books,
-        points=points,
-        minutes_to_next=scoring.minutes_to_next_point(minutes, has_children, rules),
-        codes=scoring.codes_from_points(points, rules),
-        points_to_next_code=scoring.points_to_next_code(points, rules),
+        codes_from_minutes=from_minutes,
+        codes_from_books=from_books,
+        codes=codes,
+        max_codes=rules["max_codes"],
+        minutes_to_next=scoring.minutes_to_next_code(minutes, has_children, rules),
         rank=me["rank"] if me else None,
         total_participants=len(standings) or 1,
         total_prize_so_far=db.total_prize_won(user_id),
-        capped=raw >= rules["max_points"],
+        capped=capped,
     )
 
 
@@ -189,7 +187,7 @@ def finish_season(season_id: int, auto: bool = False):
     db.end_season(season_id)  # اول بسته می‌شود تا اجرای دوباره/همزمان ممکن نباشد
     for r in standings:
         db.save_season_result(
-            season_id, r["user_id"], r["minutes"], r["points"], r["codes"], r["rank"],
+            season_id, r["user_id"], r["minutes"], None, r["codes"], r["rank"],
             prize if r["user_id"] in winners else 0,
         )
     log.info("season ended: %s winners=%s prize=%s auto=%s", season["name"], winners, prize, auto)

@@ -551,7 +551,7 @@ def handle_callback_query(cb: dict):
         elif field == "child":
             send_message(
                 chat_id,
-                "آیا فرزند دارید؟\n(توجه: این گزینه روی محاسبه‌ی امتیاز فصل جاری شما اثر می‌گذارد)",
+                "آیا فرزند دارید؟\n(توجه: این گزینه روی محاسبه‌ی کد قرعه‌کشی فصل جاری شما اثر می‌گذارد)",
                 reply_markup=keyboards.yes_no_children("pchild"),
             )
         return
@@ -578,7 +578,7 @@ def handle_callback_query(cb: dict):
         if message_id:
             edit_message_text(
                 chat_id, message_id,
-                texts.BOOK_DONE_SAVED.format(points=book["points"], title=book["title"]) if ok
+                texts.BOOK_DONE_SAVED.format(codes=db.get_rules()["codes_per_book"], title=book["title"]) if ok
                 else texts.BOOK_ALREADY_DONE,
             )
         if ok:
@@ -643,7 +643,7 @@ def handle_callback_query(cb: dict):
         if action == "bkdel":
             edit_or_send(
                 chat_id, message_id,
-                f"ثبت اتمام کتاب «{book['title']}» ({book['points']} امتیاز) لغو شود؟",
+                f"ثبت اتمام کتاب «{book['title']}» لغو شود؟",
                 keyboards.confirm_keyboard(f"bkdelyes:{book['id']}", "bk:list"),
             )
         else:

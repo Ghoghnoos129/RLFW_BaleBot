@@ -9,7 +9,7 @@ from app.utils import fmt_money, format_card, mask_card
 WELCOME = (
     "سلام 🌱\n"
     "به «لیگ کتابخوانی» خوش آمدید.\n\n"
-    "این ربات برای ثبت زمان مطالعه و پیگیری امتیاز و کد قرعه‌کشی شماست."
+    "این ربات برای ثبت زمان مطالعه و پیگیری کدهای قرعه‌کشی شماست."
 )
 
 ASK_PASSWORD = (
@@ -24,7 +24,7 @@ REGISTRATION_CLOSED = (
 
 ASK_NAME = "نام و نام خانوادگی خودتان را ارسال کنید:"
 ASK_SPOUSE = "نام و نام خانوادگی همسرتان را ارسال کنید:"
-ASK_CHILDREN = "آیا فرزند دارید؟ (این موضوع در محاسبه امتیاز شما مؤثر است)"
+ASK_CHILDREN = "آیا فرزند دارید؟ (این موضوع در محاسبه کد قرعه‌کشی شما مؤثر است)"
 ASK_CARD = (
     "💳 شماره کارت (۱۶ رقمی) خود را برای واریز جایزه (در صورت برنده‌شدن) ارسال کنید.\n\n"
     "⚠️ توجه: شماره کارت باید به نام خودِ شرکت‌کننده یا همسر او باشد."
@@ -78,11 +78,11 @@ NOTHING_TO_EDIT = "در این فصل هنوز مطالعه یا کتابی ثب
 
 ASK_BOOK_DONE = (
     "آیا یکی از کتاب‌های ویژه‌ی این فصل را به پایان رساندید؟\n"
-    "(یادآوری: امتیاز کتاب فقط با مطالعه‌ی کامل آن تعلق می‌گیرد)"
+    "(یادآوری: کد قرعه‌کشی کتاب فقط با مطالعه‌ی کامل آن تعلق می‌گیرد)"
 )
 NO_BOOKS_THIS_SEASON = "در این فصل هنوز کتاب ویژه‌ای توسط مدیر معرفی نشده است."
-BOOK_ALREADY_DONE = "شما قبلاً امتیاز این کتاب را دریافت کرده‌اید."
-BOOK_DONE_SAVED = "🎉 آفرین! {points} امتیاز برای اتمام کتاب «{title}» به شما تعلق گرفت."
+BOOK_ALREADY_DONE = "شما قبلاً کد این کتاب را دریافت کرده‌اید."
+BOOK_DONE_SAVED = "🎉 آفرین! {codes} کد قرعه‌کشی برای اتمام کتاب «{title}» به شما تعلق گرفت."
 BOOK_SKIPPED = "باشد، هر وقت کتابی را تمام کردید از همین‌جا اعلام کنید."
 BOOK_UNDONE = "↩️ ثبت اتمام کتاب «{title}» لغو شد."
 
@@ -93,10 +93,10 @@ HELP_USER = (
     "دکمه‌های منو:\n"
     "📖 ثبت مطالعه — ثبت دقایق مطالعه\n"
     "✏️ اصلاح مطالعه — اصلاح یا حذف عددی که اشتباه وارد کرده‌اید\n"
-    "🏆 کارنامه من — امتیاز، کد و رتبه شما در فصل جاری\n"
+    "🏆 کارنامه من — میزان مطالعه، کدها و رتبه شما در فصل جاری\n"
     "🏁 وضعیت لیگ — سه نفر اول، جایگاه شما، جایزه لیگ و تعداد شرکت‌کنندگان\n"
-    "📚 کتاب‌های ویژه این فصل — لیست کتاب‌های معرفی‌شده و امتیاز هرکدام\n"
-    "📜 قوانین لیگ — نحوه محاسبه امتیاز و جایزه\n"
+    "📚 کتاب‌های ویژه این فصل — لیست کتاب‌های معرفی‌شده (هر کتاب یک کد قرعه‌کشی)\n"
+    "📜 قوانین لیگ — نحوه محاسبه کد قرعه‌کشی و جایزه\n"
     "👤 مشخصات من — مشاهده و اصلاح نام، همسر، فرزند و شماره کارت\n"
     "⏰ یادآور مطالعه — ساعتی را انتخاب کنید تا هر روز همان ساعت یادآوری بگیرید\n"
     "🗳 نظرسنجی‌ها — نظرسنجی‌های بازِ لیگ را ببینید و رأی دهید\n\n"
@@ -113,7 +113,7 @@ HELP_ADMIN_EXTRA = (
     "🗳 «نظرسنجی‌ها»: ساخت نظرسنجی با دکمه‌های شیشه‌ای و مهلت دلخواه\n\n"
     "دستورهای میان‌بر:\n"
     "/فصل_جدید <نام> | <تاریخ شروع> | <تاریخ پایان> — مثال: /فصل_جدید پاییز | 1405/08/01 | 1405/10/30\n"
-    "/افزودن_کتاب <عنوان> | <امتیاز> — به فصل فعال (یا نزدیک‌ترین فصل در انتظار). برای چند کتاب، هر کتاب را در یک خط بنویسید\n"
+    "/افزودن_کتاب <عنوان> — به فصل فعال (یا نزدیک‌ترین فصل در انتظار). برای چند کتاب، هر کتاب را در یک خط بنویسید\n"
     "/حذف_کتاب <شناسه‌ها> — چند شناسه با فاصله/کاما یا بازه؛ مثال: 3 5 7-9\n"
     "/حذف_کاربر <شناسه‌ها> — حذف یک یا چند کاربر (با تایید)\n"
     "/لیست_کتاب‌ها\n"
@@ -132,12 +132,11 @@ def rules_text(rules: dict, custom=None) -> str:
         return "📜 قوانین لیگ کتابخوانی\n\n" + custom
     return (
         "📜 قوانین لیگ کتابخوانی\n\n"
-        f"• هر {rules['minutes_per_point_child']} دقیقه مطالعه (برای خانواده‌های دارای فرزند) یا "
-        f"{rules['minutes_per_point_nochild']} دقیقه (برای خانواده‌های بدون فرزند) = ۱ امتیاز\n"
-        "• اتمام کامل هر کتاب ویژه، امتیاز مخصوص همان کتاب را به همراه دارد\n"
-        f"• هر {rules['points_per_code']} امتیاز = ۱ کد قرعه‌کشی "
-        f"(باقیمانده کمتر از {rules['points_per_code']} امتیاز در پایان فصل حذف می‌شود)\n"
-        f"• سقف امتیاز هر فصل: {rules['max_points']} امتیاز\n"
+        f"• هر {rules['minutes_per_code_child']} دقیقه مطالعه (برای خانواده‌های دارای فرزند) یا "
+        f"{rules['minutes_per_code_nochild']} دقیقه (برای خانواده‌های بدون فرزند) = ۱ کد قرعه‌کشی "
+        "(باقیمانده کمتر از آن در پایان فصل حذف می‌شود)\n"
+        f"• اتمام کامل هر کتاب ویژه = {rules['codes_per_book']} کد قرعه‌کشی\n"
+        f"• سقف کد هر نفر در هر فصل: {rules['max_codes']} کد\n"
         f"• در پایان هر فصل بین دارندگان کد، قرعه‌کشی {rules['winners']} جایزه نقدی انجام می‌شود\n"
         f"• جایزه هر برنده: {fmt_money(rules['base_prize'])} تومان پایه، به‌علاوه "
         f"{fmt_money(rules['bonus_per_step'])} تومان به ازای هر {rules['codes_per_step']} کدِ مجموع "
@@ -151,9 +150,9 @@ def rules_text(rules: dict, custom=None) -> str:
 def books_list_text(books):
     if not books:
         return NO_BOOKS_THIS_SEASON
-    lines = ["📚 کتاب‌های ویژه این فصل:\n"]
+    lines = ["📚 کتاب‌های ویژه این فصل (اتمام هر کتاب = یک کد قرعه‌کشی):\n"]
     for b in books:
-        lines.append(f"• {b['title']} — {b['points']} امتیاز")
+        lines.append(f"• {b['title']}")
     return "\n".join(lines)
 
 
@@ -165,21 +164,15 @@ def period_text(season) -> str:
 # ---------- کارنامه ----------
 
 def report_text(*, full_name, spouse_name, has_children, season_name, minutes, completed_books,
-                points, minutes_to_next, codes, points_to_next_code, rank,
+                codes_from_minutes, codes_from_books, codes, max_codes, minutes_to_next, rank,
                 total_participants, total_prize_so_far, capped):
     children_text = "دارد" if has_children else "بدون فرزند"
-
-    if completed_books:
-        books_txt = "، ".join(f"{b['title']} ({b['points']} امتیاز)" for b in completed_books)
-    else:
-        books_txt = "—"
+    books_txt = "، ".join(b["title"] for b in completed_books) if completed_books else "—"
 
     if capped:
-        next_point_txt = "به سقف امتیاز فصل رسیده‌اید 🎉"
-        next_code_txt = f"{points_to_next_code} امتیاز (اما به سقف فصل رسیده‌اید)"
+        next_txt = f"به سقف کد فصل ({max_codes} کد) رسیده‌اید 🎉"
     else:
-        next_point_txt = f"{minutes_to_next} دقیقه"
-        next_code_txt = f"{points_to_next_code} امتیاز"
+        next_txt = f"{minutes_to_next} دقیقه"
 
     rank_txt = f"{rank} از {total_participants}" if rank else "هنوز مطالعه‌ای ثبت نکرده‌اید"
 
@@ -189,11 +182,10 @@ def report_text(*, full_name, spouse_name, has_children, season_name, minutes, c
         f"👫 نام همسر: {spouse_name or '—'}\n"
         f"👶 فرزندان: {children_text}\n"
         f"⏱ میزان مطالعه این فصل: {minutes} دقیقه\n"
-        f"📚 مطالعه کتب منتخب: {books_txt}\n"
-        f"⭐ مجموع امتیاز کسب‌شده: {points} امتیاز\n"
-        f"➕ میزان مطالعه برای کسب امتیاز بعدی: {next_point_txt}\n"
-        f"🎟 مجموعه کدهای جایزه: {codes} کد\n"
-        f"➕ امتیاز لازم برای کد بعدی: {next_code_txt}\n"
+        f"📚 کتاب‌های تمام‌شده: {books_txt}\n"
+        f"🎟 کد از مطالعه: {codes_from_minutes} | کد از کتاب‌ها: {codes_from_books}\n"
+        f"🎟 مجموع کدهای قرعه‌کشی: {codes} کد\n"
+        f"➕ مطالعه لازم برای کد بعدی: {next_txt}\n"
         f"📊 رتبه در لیگ کتابخوانی ({season_name}): {rank_txt}\n"
         f"💰 جایزه لیگ برای شما تا به الان: {fmt_money(total_prize_so_far)} تومان"
     )
@@ -215,12 +207,12 @@ def status_text(season, top3, me, participants_count, registered_count, prize, t
     ]
     if top3:
         for i, r in enumerate(top3):
-            lines.append(f"{MEDALS[i]} {r['full_name']} — {r['points']} امتیاز")
+            lines.append(f"{MEDALS[i]} {r['full_name']} — {r['codes']} کد")
     else:
         lines.append("هنوز کسی مطالعه‌ای ثبت نکرده است.")
     lines.append("")
     if me:
-        lines.append(f"📍 جایگاه شما: {me['rank']} از {participants_count} — {me['points']} امتیاز، {me['codes']} کد")
+        lines.append(f"📍 جایگاه شما: {me['rank']} از {participants_count} — {me['minutes']} دقیقه، {me['codes']} کد")
     else:
         lines.append("📍 جایگاه شما: هنوز مطالعه‌ای در این فصل ثبت نکرده‌اید.")
     lines.append("")

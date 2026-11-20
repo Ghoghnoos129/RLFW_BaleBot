@@ -32,7 +32,7 @@ LOG_PATH = os.getenv("LOG_PATH", "./data/bot.log")
 HEARTBEAT_PATH = os.getenv("HEARTBEAT_PATH", "./data/heartbeat")
 SEASON_PREFIX = os.getenv("DEFAULT_SEASON_PREFIX", "فصل")
 
-VERSION = "0.3"
+VERSION = "1.0"
 
 API_BASE = f"https://tapi.bale.ai/bot{BALE_TOKEN}"
 
@@ -47,10 +47,10 @@ MAX_MINUTES_PER_ENTRY = 1440
 # از نسخه ۰.۲ مدیر می‌تواند همه این مقادیر را از داخل بله (پنل مدیریت ← قوانین و فرمول‌ها) تغییر دهد.
 # مقدار تغییرداده‌شده در دیتابیس ذخیره می‌شود و بر این پیش‌فرض‌ها اولویت دارد.
 DEFAULT_RULES = {
-    "minutes_per_point_child": 20,     # دقیقه مطالعه برای هر امتیاز (دارای فرزند)
-    "minutes_per_point_nochild": 25,   # دقیقه مطالعه برای هر امتیاز (بدون فرزند)
-    "max_points": 150,                 # سقف امتیاز هر فصل
-    "points_per_code": 5,              # امتیاز لازم برای هر کد قرعه‌کشی
+    "minutes_per_code_child": 100,     # دقیقه مطالعه برای هر کد قرعه‌کشی (دارای فرزند)  [قبلاً ۵ امتیاز × ۲۰ دقیقه]
+    "minutes_per_code_nochild": 125,   # دقیقه مطالعه برای هر کد قرعه‌کشی (بدون فرزند)  [قبلاً ۵ امتیاز × ۲۵ دقیقه]
+    "codes_per_book": 1,               # کد قرعه‌کشی برای اتمام هر کتاب ویژه
+    "max_codes": 30,                   # سقف کد هر فصل  [قبلاً سقف ۱۵۰ امتیاز ÷ ۵]
     "base_prize": 500_000,             # جایزه پایه هر برنده (تومان)
     "bonus_per_step": 100_000,         # افزایش جایزه هر برنده به ازای هر پله (تومان)
     "codes_per_step": 10,              # هر چند کد (مجموع شرکت‌کنندگان) یک پله افزایش جایزه است

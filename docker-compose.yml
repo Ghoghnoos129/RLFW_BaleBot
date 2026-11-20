@@ -6,11 +6,15 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        # توجه: مقدار پیش‌فرض را به آینه داخلی تغییر دادیم تا Coolify هنگام build
-        # مستقیماً از آینه استفاده کند و درگیر تحریم 403 Docker Hub نشود.
-        # اگر آینه دیگری مدنظر دارید، BASE_IMAGE را در .env یا Build Variable در
-        # Coolify تنظیم کنید (مثلاً docker.ththt.ir یا docker.arvancloud.ir).
-        BASE_IMAGE: ${BASE_IMAGE:-docker.abrha.net/library/python:3.12-slim-bookworm}
+        # نکته مهم: وقتی با «docker compose build» ساخته می‌شود (دقیقاً کاری که Coolify
+        # انجام می‌دهد)، همین مقدار پیش‌فرض اینجا به Dockerfile پاس داده می‌شود و پیش‌فرض
+        # داخل خودِ Dockerfile را override می‌کند — پس این دو باید همیشه با هم هماهنگ
+        # بمانند. اگر می‌خواهید آینه دیگری استفاده شود، مقدار BASE_IMAGE را در .env (یا
+        # Build Variable در Coolify) تنظیم کنید؛ جزئیات و لیست آینه‌های جایگزین در
+        # .env.example.
+        BASE_IMAGE: ${BASE_IMAGE:-python:3.12-slim-bookworm}
+    # نام ایمیج داکر باید حتما lowercase باشد (محدودیت رجیستری داکر)؛ نام نمایشی/کانتینر
+    # همچنان RLFW_BaleBot است.
     image: rlfw_balebot:latest
     container_name: RLFW_BaleBot
     restart: unless-stopped
@@ -19,24 +23,26 @@ services:
       - .env
 
     # --- سخت‌سازی امنیتی کانتینر ---
-    user: "10001:10001"
-    read_only: true
+    user: "10001:10001"               # همان appuser داخل Dockerfile، هرگز روت اجرا نشود
+    read_only: true                    # فایل‌سیستم ریشه فقط-خواندنی؛ فقط data/ و tmp قابل نوشتن‌اند
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges:true         # جلوگیری از افزایش دسترسی (setuid و مشابه)
     cap_drop:
-      - ALL
-    # خط pid حذف شد — Docker به طور پیش‌فرض PID namespace ایزوله می‌سازد.
-    ipc: "none"
+      - ALL                            # هیچ Linux capability اضافه‌ای لازم ندارد
+    # توجه: خط pid حذف شد — Docker به طور پیش‌فرض برای هر کانتینر یک PID namespace
+    # جداگانه و ایزوله می‌سازد (امن‌ترین حالت). مقدار "container" به تنهایی نامعتبر است
+    # و باعث خطای «invalid PID mode: container» می‌شد.
+    ipc: "none"                        # بدون نیاز به IPC مشترک
     networks:
-      - internal_only
+      - internal_only                  # بدون دسترسی به شبکه خارجی به جز از طریق NAT خروجی معمول
 
     tmpfs:
       - /tmp:rw,noexec,nosuid,nodev,size=16m
 
     volumes:
-      - bot_data:/app/data
+      - bot_data:/app/data            # تنها مسیر قابل‌نوشتن: دیتابیس sqlite + لاگ + heartbeat
 
-    # --- محدودیت منابع ---
+    # --- محدودیت منابع، برای جلوگیری از مصرف بی‌رویه در صورت باگ/حمله ---
     cpus: "0.50"
     mem_limit: 256m
     mem_reservation: 64m
@@ -51,7 +57,7 @@ services:
 networks:
   internal_only:
     driver: bridge
-    internal: false
+    internal: false   # false چون ربات باید به tapi.bale.ai (اینترنت) وصل شود؛ هیچ پورتی هم به بیرون expose نمی‌شود
 
 volumes:
   bot_data:

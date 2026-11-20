@@ -15,10 +15,10 @@ log = logging.getLogger("admin")
 
 # (کلید در قوانین، عنوان دکمه/پیام، حداقل مقدار مجاز)
 RULE_FIELDS = [
-    ("minutes_per_point_child", "⏱ دقیقه برای هر امتیاز (دارای فرزند)", 1),
-    ("minutes_per_point_nochild", "⏱ دقیقه برای هر امتیاز (بدون فرزند)", 1),
-    ("max_points", "🔝 سقف امتیاز هر فصل", 1),
-    ("points_per_code", "🎟 امتیاز لازم برای هر کد", 1),
+    ("minutes_per_code_child", "⏱ دقیقه مطالعه برای هر کد (دارای فرزند)", 1),
+    ("minutes_per_code_nochild", "⏱ دقیقه مطالعه برای هر کد (بدون فرزند)", 1),
+    ("codes_per_book", "📚 تعداد کد هر کتاب تمام‌شده", 0),
+    ("max_codes", "🔝 سقف کد هر نفر در هر فصل", 1),
     ("base_prize", "💰 جایزه پایه هر برنده (تومان)", 0),
     ("bonus_per_step", "➕ افزایش جایزه در هر پله (تومان)", 0),
     ("codes_per_step", "📈 تعداد کد هر پله‌ی افزایش جایزه", 1),
@@ -89,7 +89,7 @@ def _rules_screen(chat_id, message_id=None, note=""):
     lines.append(f"📝 متن نمایشی قوانین برای کاربران: {'سفارشی' if custom else 'خودکار (از روی اعداد بالا)'}")
     lines.append(f"⏹ پایان خودکار فصل در تاریخ پایان: {'روشن' if db.auto_end_enabled() else 'خاموش'}")
     lines.append("")
-    lines.append("برای تغییر هر مورد روی دکمه‌اش بزنید. ⚠️ تغییر اعداد روی محاسبه‌ی امتیاز و کد فصل جاری هم اثر می‌گذارد.")
+    lines.append("برای تغییر هر مورد روی دکمه‌اش بزنید. ⚠️ تغییر اعداد روی محاسبه‌ی کد فصل جاری هم اثر می‌گذارد.")
     rows = []
     for i, (_, label, _) in enumerate(RULE_FIELDS):
         rows.append([(label, f"adm:rule:{i}")])
@@ -167,7 +167,7 @@ def _confirm_end(chat_id, message_id, season_id):
     edit_or_send(
         chat_id, message_id,
         f"آیا مطمئن هستید می‌خواهید «{s['name']}» را پایان دهید؟\n"
-        "امتیازها ثبت و آرشیو می‌شود، قرعه‌کشی انجام می‌شود و نتیجه (نام برندگان) برای همه ارسال می‌شود.",
+        "کدها و نتایج ثبت و آرشیو می‌شود، قرعه‌کشی انجام می‌شود و نتیجه (نام برندگان) برای همه ارسال می‌شود.",
         confirm_keyboard(f"adm:sendyes:{season_id}", f"adm:s:{season_id}"),
     )
 
@@ -182,7 +182,7 @@ def _season_report_text(s) -> str:
             return f"📊 گزارش «{s['name']}»\n\nهنوز هیچ‌کس مطالعه‌ای ثبت نکرده است."
         lines = [f"📊 گزارش «{s['name']}» (در جریان)\n"]
         for r in standings:
-            lines.append(f"{r['rank']}. {r['full_name']} — {r['minutes']} دقیقه — {r['points']} امتیاز — {r['codes']} کد")
+            lines.append(f"{r['rank']}. {r['full_name']} — {r['minutes']} دقیقه — {r['codes']} کد")
         lines.append(f"\n🎟 مجموع کدها: {total_codes}")
         lines.append(f"🎁 جایزه فعلی هر برنده: {utils.fmt_money(prize)} تومان")
         return "\n".join(lines)
@@ -193,7 +193,7 @@ def _season_report_text(s) -> str:
     lines = [f"📊 نتایج نهایی «{s['name']}»\n"]
     for i, r in enumerate(results, start=1):
         mark = " 🏆" if (r["prize"] or 0) > 0 else ""
-        lines.append(f"{i}. {r['full_name'] or r['user_id']} — {r['minutes']} دقیقه — {r['points']} امتیاز — {r['codes']} کد{mark}")
+        lines.append(f"{i}. {r['full_name'] or r['user_id']} — {r['minutes']} دقیقه — {r['codes']} کد{mark}")
     winners = [r for r in results if (r["prize"] or 0) > 0]
     lines.append("")
     if winners:
@@ -233,7 +233,7 @@ def _books_screen(chat_id, message_id, season_id):
     if not books:
         lines.append("هنوز کتابی اضافه نشده.")
     for b in books:
-        lines.append(f"#{b['id']} — {b['title']} ({b['points']} امتیاز)")
+        lines.append(f"#{b['id']} — {b['title']}")
         if s["status"] != "ended":
             rows.append([(f"🗑 حذف: {b['title']}", f"adm:bookdel:{b['id']}:{season_id}")])
     if s["status"] != "ended":
@@ -244,14 +244,14 @@ def _books_screen(chat_id, message_id, season_id):
     edit_or_send(chat_id, message_id, "\n".join(lines), inline(rows))
 
 
-BOOK_FORMAT = ("هر کتاب در یک خط: عنوان | امتیاز\n"
+BOOK_FORMAT = ("هر کتاب در یک خط (فقط عنوان؛ هر کتاب تمام‌شده یک کد قرعه‌کشی دارد)\n"
                "برای افزودن چند کتاب، چند خط بنویسید و یکجا بفرستید. مثال:\n"
-               "طرح کلی اندیشه اسلامی در قرآن | 10\n"
-               "کتاب دوم | 8")
+               "طرح کلی اندیشه اسلامی در قرآن\n"
+               "کتاب دوم")
 
 
 def _add_books(chat_id, season_id, raw) -> bool:
-    """یک یا چند کتاب (هر خط: عنوان | امتیاز). True اگر کار تمام شد؛ False اگر باید دوباره ارسال کند."""
+    """یک یا چند کتاب (هر خط: یک عنوان). True اگر کار تمام شد؛ False اگر باید دوباره ارسال کند."""
     season = db.get_season(season_id)
     if not season or season["status"] == "ended":
         send_message(chat_id, "به این فصل نمی‌توان کتاب اضافه کرد.")
@@ -261,23 +261,23 @@ def _add_books(chat_id, season_id, raw) -> bool:
         line = line.strip()
         if not line:
             continue
-        title, sep, points_str = line.rpartition("|")
-        title, points = title.strip(), utils.parse_int(points_str)
-        if not sep or not title or points is None:
+        # سازگاری با فرمت قدیمی «عنوان | عدد»: بخش بعد از | نادیده گرفته می‌شود
+        title = line.split("|", 1)[0].strip()
+        if not title or len(title) > 200:
             failed.append(line)
         else:
-            items.append((title, points))
+            items.append(title)
     if len(items) + len(failed) > 100:
         _ask(chat_id, "حداکثر ۱۰۰ خط در هر بار. تعداد کمتری ارسال کنید.")
         return False
     if not items:
-        _ask(chat_id, "هیچ کتاب معتبری پیدا نشد.\n" + BOOK_FORMAT + "\n(امتیاز باید عدد باشد)")
+        _ask(chat_id, "هیچ کتاب معتبری پیدا نشد.\n" + BOOK_FORMAT + "")
         return False
     db.add_books(season_id, items)
     lines = [f"✅ {len(items)} کتاب به «{season['name']}» اضافه شد:"]
-    lines += [f"• {t} — {p} امتیاز" for t, p in items]
+    lines += [f"• {t}" for t in items]
     if failed:
-        lines.append(f"\n⚠️ {len(failed)} خط نامعتبر بود و اضافه نشد (فرمت: عنوان | امتیاز):")
+        lines.append(f"\n⚠️ {len(failed)} خط نامعتبر بود و اضافه نشد (عنوان خالی یا بیش از حد طولانی):")
         lines += [f"✗ {f}" for f in failed]
     send_long(chat_id, "\n".join(lines),
               inline([[("📚 لیست کتاب‌ها", f"adm:books:{season_id}")], BACK_HOME]))
@@ -317,7 +317,7 @@ def _delete_books(chat_id, text, season_id=None):
 #  کاربران و رمز ثبت‌نام
 # ============================================================
 
-USER_DEL_WARNING = ("⚠️ همه‌ی مطالعه‌ها، امتیازها و نتایج ذخیره‌شده‌ی این کاربر در همه‌ی فصل‌ها (از جمله فصل‌های گذشته) "
+USER_DEL_WARNING = ("⚠️ همه‌ی مطالعه‌ها، کدها و نتایج ذخیره‌شده‌ی این کاربر در همه‌ی فصل‌ها (از جمله فصل‌های گذشته) "
                     "پاک می‌شود و برگشت‌پذیر نیست (مگر با فایل پشتیبان). کاربر می‌تواند دوباره با رمز ثبت‌نام کند.")
 
 
@@ -499,7 +499,7 @@ def _wipe_warning_screen(chat_id, message_id):
         chat_id, message_id,
         "🚨 هشدار: حذف داده‌ها\n\n"
         "این کار غیرقابل برگشت است. یکی از دو سطح را انتخاب کنید:\n\n"
-        "۱) حذف لیگ‌ها و تاریخچه — همه‌ی فصل‌ها، کتاب‌های ویژه، مطالعه‌ها، امتیازها، نتایج و برندگان، نظرسنجی‌ها و تاریخچه‌ی پیام‌ها پاک می‌شود. "
+        "۱) حذف لیگ‌ها و تاریخچه — همه‌ی فصل‌ها، کتاب‌های ویژه، مطالعه‌ها، کدها، نتایج و برندگان، نظرسنجی‌ها و تاریخچه‌ی پیام‌ها پاک می‌شود. "
         "کاربران، مدیرها و تنظیمات (قوانین، رمز ثبت‌نام) می‌مانند.\n\n"
         "۲) حذف کامل — علاوه بر موارد بالا، همه‌ی کاربران ثبت‌نام‌شده هم حذف می‌شوند "
         "(باید دوباره با رمز ثبت‌نام کنند). مدیرها و تنظیمات می‌مانند.\n\n"
@@ -1018,7 +1018,7 @@ def handle_callback(cb: dict):
             return
         edit_or_send(
             chat_id, message_id,
-            f"کتاب «{book['title']}» حذف شود؟ (امتیاز اتمام این کتاب هم از کاربرانی که ثبت کرده‌اند کم می‌شود)",
+            f"کتاب «{book['title']}» حذف شود؟ (کد اتمام این کتاب هم از کاربرانی که ثبت کرده‌اند کم می‌شود)",
             confirm_keyboard(f"adm:bookdelyes:{bid}:{sid}", f"adm:books:{sid}"),
         )
 

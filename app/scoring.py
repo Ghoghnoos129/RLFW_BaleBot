@@ -1,41 +1,38 @@
 """
-منطق امتیازدهی، کدهای قرعه‌کشی و جوایز — بر اساس «طرح لیگ کتابخوانی».
-از نسخه ۰.۲ همه‌ی اعداد از «قوانین» (rules) خوانده می‌شوند که مدیر از داخل بله تغییرشان می‌دهد
-(db.get_rules()). هر تابع، دیکشنری قوانین را به عنوان آرگومان آخر می‌گیرد.
+منطق کدهای قرعه‌کشی و جوایز — بر اساس «طرح لیگ کتابخوانی».
+از نسخه ۱.۰ «امتیاز» حذف شده است: دقایق مطالعه مستقیم به کد قرعه‌کشی تبدیل می‌شود و هر کتابِ
+تمام‌شده هم تعدادی کد (پیش‌فرض ۱) دارد. همه‌ی اعداد از «قوانین» (rules) خوانده می‌شود که مدیر از داخل بله
+تغییرشان می‌دهد (db.get_rules()).
 """
 import random
 
 
-def minutes_per_point(has_children: bool, rules: dict) -> int:
-    key = "minutes_per_point_child" if has_children else "minutes_per_point_nochild"
+def minutes_per_code(has_children: bool, rules: dict) -> int:
+    key = "minutes_per_code_child" if has_children else "minutes_per_code_nochild"
     return max(1, rules[key])
 
 
-def points_from_minutes(minutes: int, has_children: bool, rules: dict) -> int:
-    return minutes // minutes_per_point(has_children, rules)
+def codes_from_minutes(minutes: int, has_children: bool, rules: dict) -> int:
+    """کدِ حاصل از مطالعه (رند به پایین؛ باقیمانده به فصل بعد منتقل نمی‌شود)."""
+    return minutes // minutes_per_code(has_children, rules)
 
 
-def raw_points(minutes: int, has_children: bool, book_points: int, rules: dict) -> int:
-    """امتیاز قبل از اعمال سقف فصل."""
-    return points_from_minutes(minutes, has_children, rules) + book_points
+def codes_from_books(books_count: int, rules: dict) -> int:
+    return books_count * max(0, rules["codes_per_book"])
 
 
-def capped_points(minutes: int, has_children: bool, book_points: int, rules: dict) -> int:
-    return min(raw_points(minutes, has_children, book_points, rules), rules["max_points"])
+def total_codes(minutes: int, has_children: bool, books_count: int, rules: dict):
+    """(کدِ مطالعه, کدِ کتاب‌ها, مجموع پس از اعمال سقف فصل, آیا به سقف رسیده)"""
+    from_minutes = codes_from_minutes(minutes, has_children, rules)
+    from_books = codes_from_books(books_count, rules)
+    raw = from_minutes + from_books
+    cap = max(0, rules["max_codes"])
+    return from_minutes, from_books, min(raw, cap), raw >= cap
 
 
-def minutes_to_next_point(minutes: int, has_children: bool, rules: dict) -> int:
-    interval = minutes_per_point(has_children, rules)
+def minutes_to_next_code(minutes: int, has_children: bool, rules: dict) -> int:
+    interval = minutes_per_code(has_children, rules)
     return interval - (minutes % interval)
-
-
-def codes_from_points(points: int, rules: dict) -> int:
-    return points // max(1, rules["points_per_code"])
-
-
-def points_to_next_code(points: int, rules: dict) -> int:
-    ppc = max(1, rules["points_per_code"])
-    return ppc - (points % ppc)
 
 
 def prize_per_winner(total_codes_in_pool: int, rules: dict) -> int:
@@ -55,8 +52,8 @@ def run_lottery(entries: list, rules: dict):
     برمی‌گرداند: (لیست برندگان [user_id, ...], مبلغ جایزه هر برنده, مجموع کدهای شرکت‌کننده در قرعه‌کشی)
     هر کد یک بلیط است؛ هر نفر حداکثر یک‌بار برنده می‌شود.
     """
-    total_codes = sum(codes for _, codes in entries)
-    prize = prize_per_winner(total_codes, rules)
+    total = sum(codes for _, codes in entries)
+    prize = prize_per_winner(total, rules)
 
     pool = []
     for user_id, codes in entries:
@@ -70,4 +67,4 @@ def run_lottery(entries: list, rules: dict):
         winners.append(pick)
         remaining_pool = [u for u in remaining_pool if u != pick]
 
-    return winners, prize, total_codes
+    return winners, prize, total
